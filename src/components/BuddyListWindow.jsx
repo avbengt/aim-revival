@@ -1,11 +1,12 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 import { useRef } from "react";
 import { useDraggableWindow } from "@/hooks/useDraggableWindow";
-import { useWindowManager } from "@context/WindowManagerContext";
+import { useWindowManager } from "@/context/WindowManagerContext";
 
 export default function BuddyListWindow() {
     const { buddyListVisible, setBuddyListVisible } = useWindowManager();
-    const winRef = useRef<HTMLDivElement>(null);
+    const winRef = useRef(null);
 
     useDraggableWindow(winRef, {
         headerSelector: ".buddylist-header",
@@ -14,12 +15,10 @@ export default function BuddyListWindow() {
         centerOnFirstPaint: true,
     });
 
-    return buddyListVisible ? (
-        <div
-            ref={winRef}
-            id="buddylist-window"
-            className="window w-[280px] h-[520px] absolute z-50"
-        >
+    if (!buddyListVisible) return null;
+
+    return (
+        <div ref={winRef} id="buddylist-window" className="window w-[280px] h-[520px] absolute">
             <div className="title-bar buddylist-header">
                 <div className="title-bar-text">Buddy List</div>
                 <div className="title-bar-controls">
@@ -30,9 +29,9 @@ export default function BuddyListWindow() {
             </div>
 
             <div className="window-body p-2">
-                {/* your real buddy list content goes here */}
-                <p className="text-sm">Coming soon: buddies!</p>
+                {/* TODO: real buddy list */}
+                <p className="text-sm">Coming soon: buddies grouped like AIM 5.0 🙂</p>
             </div>
         </div>
-    ) : null;
+    );
 }

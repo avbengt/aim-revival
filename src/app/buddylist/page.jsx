@@ -14,24 +14,15 @@ import {
     where,
     orderBy,
 } from "firebase/firestore";
-import { onDisconnect, ref, set as rtdbSet } from "firebase/database";
-import { getDatabase } from "firebase/database";
-
-type Buddy = {
-    uid: string;
-    screenname: string;
-    online: boolean;
-};
+import { onDisconnect, ref, set as rtdbSet, getDatabase } from "firebase/database";
 
 export default function BuddyList() {
     const router = useRouter();
-    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-    const [buddies, setBuddies] = useState<{ online: Buddy[]; offline: Buddy[] }>({
-        online: [],
-        offline: [],
-    });
+    const [currentUserId, setCurrentUserId] = useState(null);
+    const [buddies, setBuddies] = useState({ online: [], offline: [] });
 
-    const openedChats = useRef<Map<string, Window | null>>(new Map());
+    // Track opened chat popups so we don't spam new windows
+    const openedChats = useRef(new Map());
     const hasInitializedListener = useRef(false);
 
     useEffect(() => {
@@ -52,18 +43,18 @@ export default function BuddyList() {
             rtdbSet(statusRef, true);
             onDisconnect(statusRef).remove();
 
-            // Mark user as online
+            // Mark user as online in Firestore
             await updateDoc(doc(db, "users", user.uid), { online: true });
 
-            // Buddy list snapshot
+            // Listen to all users and split online/offline
             const usersRef = collection(db, "users");
             unsubscribeUsers = onSnapshot(usersRef, (snapshot) => {
-                const allUsers: Buddy[] = snapshot.docs.map((doc) => {
-                    const data = doc.data();
+                const allUsers = snapshot.docs.map((d) => {
+                    const data = d.data() || {};
                     return {
-                        uid: doc.id,
+                        uid: d.id,
                         screenname: data.screenname || "",
-                        online: data.online || false,
+                        online: !!data.online,
                     };
                 });
 
@@ -77,50 +68,50 @@ export default function BuddyList() {
                 setBuddies({ online, offline });
             });
 
+            // One-time incoming message listener (to pop a chat window)
             if (!hasInitializedListener.current) {
                 hasInitializedListener.current = true;
 
                 const messagesRef = collection(db, "messages");
-                const q = query(
+                const qy = query(
                     messagesRef,
                     where("to", "==", user.uid),
                     orderBy("timestamp", "desc")
                 );
 
-                unsubscribeMessages = onSnapshot(q, (snapshot) => {
+                unsubscribeMessages = onSnapshot(qy, (snapshot) => {
                     const now = Date.now();
+
                     snapshot.docChanges().forEach((change) => {
-                        if (change.type === "added") {
-                            const msg = change.doc.data();
+                        if (change.type !== "added") return;
 
-                            // Only react to messages from the last 10 seconds
-                            if (!msg.timestamp?.toDate) return;
-                            const messageTime = msg.timestamp.toDate().getTime();
-                            if (now - messageTime > 10000) return; // skip old messages
+                        const msg = change.doc.data();
 
-                            const existingWindow = openedChats.current.get(msg.from);
-                            if (!existingWindow || existingWindow.closed) {
-                                getDoc(doc(db, "users", msg.from)).then((docSnap) => {
-                                    const screenname = docSnap.exists()
-                                        ? docSnap.data().screenname
-                                        : null;
+                        // Ignore older messages so we only pop on fresh ones
+                        if (!msg.timestamp || !msg.timestamp.toDate) return;
+                        const messageTime = msg.timestamp.toDate().getTime();
+                        if (now - messageTime > 10000) return;
 
-                                    const url = screenname
-                                        ? `/chat/${msg.from}?screenname=${encodeURIComponent(screenname)}`
-                                        : `/chat/${msg.from}`;
+                        const existingWindow = openedChats.current.get(msg.from);
+                        if (!existingWindow || existingWindow.closed) {
+                            getDoc(doc(db, "users", msg.from)).then((docSnap) => {
+                                const screenname = docSnap.exists() ? docSnap.data().screenname : null;
 
-                                    const chatWindow = window.open(
-                                        url,
-                                        `_blank`,
-                                        "width=400,height=500,resizable=yes,scrollbars=yes"
-                                    );
+                                const url = screenname
+                                    ? `/chat/${msg.from}?screenname=${encodeURIComponent(screenname)}`
+                                    : `/chat/${msg.from}`;
 
-                                    if (chatWindow) {
-                                        chatWindow.focus();
-                                        openedChats.current.set(msg.from, chatWindow);
-                                    }
-                                });
-                            }
+                                const chatWindow = window.open(
+                                    url,
+                                    "_blank",
+                                    "width=400,height=500,resizable=yes,scrollbars=yes"
+                                );
+
+                                if (chatWindow) {
+                                    chatWindow.focus();
+                                    openedChats.current.set(msg.from, chatWindow);
+                                }
+                            });
                         }
                     });
                 });
@@ -134,12 +125,12 @@ export default function BuddyList() {
         };
     }, [router]);
 
-    const handleChat = (buddy: Buddy) => {
+    const handleChat = (buddy) => {
         const existingWindow = openedChats.current.get(buddy.uid);
         if (!existingWindow || existingWindow.closed) {
             const chatWindow = window.open(
                 `/chat/${buddy.uid}?screenname=${encodeURIComponent(buddy.screenname)}`,
-                `_blank`,
+                "_blank",
                 "width=600,height=450,resizable=yes,scrollbars=yes"
             );
             if (chatWindow) {
@@ -147,7 +138,7 @@ export default function BuddyList() {
                 openedChats.current.set(buddy.uid, chatWindow);
             }
         } else {
-            existingWindow.focus(); // bring it to front if already open
+            existingWindow.focus();
         }
     };
 
@@ -158,6 +149,7 @@ export default function BuddyList() {
     return (
         <div className="p-4">
             <h1 className="text-xl font-bold mb-4">Buddy List</h1>
+
             <div>
                 <h2 className="text-lg font-semibold mb-2">Buddies</h2>
                 <ul className="mb-4">

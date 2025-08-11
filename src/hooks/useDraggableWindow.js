@@ -2,23 +2,14 @@
 
 import { useEffect, useRef } from "react";
 
-type Options = {
-    headerSelector?: string;
-    disabled?: boolean;
-    storageKey?: string;
-    centerOnFirstPaint?: boolean;
-};
-
-type StoredPos = { top: number; left: number };
-
 export function useDraggableWindow(
-    winRef: React.RefObject<HTMLElement>,
+    winRef,
     {
         headerSelector,
         disabled = false,
         storageKey,
         centerOnFirstPaint = true,
-    }: Options = {}
+    } = {}
 ) {
     const startedOnce = useRef(false);
 
@@ -34,15 +25,17 @@ export function useDraggableWindow(
                 const raw = localStorage.getItem(storageKey);
                 if (raw) {
                     try {
-                        const parsed = JSON.parse(raw) as StoredPos;
-                        if (typeof parsed?.top === "number" && typeof parsed?.left === "number") {
+                        const parsed = JSON.parse(raw);
+                        if (
+                            parsed &&
+                            typeof parsed.top === "number" &&
+                            typeof parsed.left === "number"
+                        ) {
                             el.style.top = `${parsed.top}px`;
                             el.style.left = `${parsed.left}px`;
                             return;
                         }
-                    } catch {
-                        /* ignore */
-                    }
+                    } catch { }
                 }
             }
             if (!startedOnce.current && centerOnFirstPaint) {
@@ -59,8 +52,7 @@ export function useDraggableWindow(
         };
         restore();
 
-        const header: HTMLElement | null =
-            headerSelector ? (el.querySelector(headerSelector) as HTMLElement) : el;
+        const header = headerSelector ? el.querySelector(headerSelector) : el;
         if (!header) return;
 
         let startX = 0;
@@ -69,7 +61,7 @@ export function useDraggableWindow(
         let startTop = 0;
         let dragging = false;
 
-        const onPointerDown = (e: PointerEvent) => {
+        const onPointerDown = (e) => {
             if (e.button !== 0) return;
             dragging = true;
             header.setPointerCapture(e.pointerId);
@@ -80,7 +72,7 @@ export function useDraggableWindow(
             startY = e.clientY;
         };
 
-        const onPointerMove = (e: PointerEvent) => {
+        const onPointerMove = (e) => {
             if (!dragging) return;
 
             const dx = e.clientX - startX;
@@ -99,7 +91,7 @@ export function useDraggableWindow(
             el.style.top = `${Math.min(Math.max(0, nextTop), Math.max(0, maxTop))}px`;
         };
 
-        const onPointerUp = (e: PointerEvent) => {
+        const onPointerUp = (e) => {
             if (!dragging) return;
             dragging = false;
             header.releasePointerCapture(e.pointerId);
@@ -107,8 +99,7 @@ export function useDraggableWindow(
             if (storageKey) {
                 const top = parseInt(el.style.top || "0", 10);
                 const left = parseInt(el.style.left || "0", 10);
-                const payload: StoredPos = { top, left };
-                localStorage.setItem(storageKey, JSON.stringify(payload));
+                localStorage.setItem(storageKey, JSON.stringify({ top, left }));
             }
         };
 
