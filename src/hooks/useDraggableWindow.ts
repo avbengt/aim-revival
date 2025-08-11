@@ -43,7 +43,9 @@ export function useDraggableWindow(
                         winEl.style.top = `${top}px`;
                         winEl.style.left = `${left}px`;
                         return;
-                    } catch { /* ignore */ }
+                    } catch (_e: unknown) {
+                        /* ignore */
+                    }
                 }
             }
             if (!centeredOnce.current && centerOnFirstPaint) {
@@ -104,15 +106,12 @@ export function useDraggableWindow(
         const onPointerUp = (e: PointerEvent) => {
             if (!dragging) return;
             dragging = false;
-            try { header.releasePointerCapture(e.pointerId); } catch { }
+            header.releasePointerCapture(e.pointerId);
+
             if (storageKey) {
-                localStorage.setItem(
-                    storageKey,
-                    JSON.stringify({
-                        top: parseInt(winEl.style.top || "0", 10),
-                        left: parseInt(winEl.style.left || "0", 10),
-                    })
-                );
+                const top = parseInt(el.style.top || "0", 10);
+                const left = parseInt(el.style.left || "0", 10);
+                localStorage.setItem(storageKey, JSON.stringify({ top, left }));
             }
         };
 

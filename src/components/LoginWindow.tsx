@@ -50,7 +50,7 @@ export default function LoginWindow() {
             try {
                 const cred = await createUserWithEmailAndPassword(auth, email, password);
                 await setDoc(doc(db, "users", cred.user.uid), { screenname });
-            } catch (err: any) {
+            } catch (err: unknown) {
                 const msg = err?.message?.includes("auth/email-already-in-use")
                     ? "This screen name is already taken. Try another one."
                     : "Login/signup failed. Try a different screen name.";
