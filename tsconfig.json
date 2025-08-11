@@ -42,7 +42,16 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "src/hooks/useDraggableWindow.js",
+    "src/components/Clock.jsx",
+    "src/components/Taskbar.jsx",
+    "src/components/LoginWindow.jsx",
+    "src/components/BuddyListWindow.jsx",
+    "src/app/page.jsx",
+    "src/app/layout.jsx",
+    "src/app/buddylist/page.jsx",
+    "src/app/api/setOffline/route.js"
   ],
   "exclude": [
     "node_modules"

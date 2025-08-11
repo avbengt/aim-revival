@@ -51,9 +51,12 @@ export default function LoginWindow() {
                 const cred = await createUserWithEmailAndPassword(auth, email, password);
                 await setDoc(doc(db, "users", cred.user.uid), { screenname });
             } catch (err: unknown) {
-                const msg = err?.message?.includes("auth/email-already-in-use")
-                    ? "This screen name is already taken. Try another one."
-                    : "Login/signup failed. Try a different screen name.";
+                let msg = "Login/signup failed. Try a different screen name.";
+                if (err && typeof err === "object" && "message" in err) {
+                    const m = String((err as { message?: string }).message);
+                    if (m.includes("auth/email-already-in-use")) msg = "This screen name is already taken. Try another one.";
+                    else if (m.includes("auth/invalid-email")) msg = "Screen name format is invalid.";
+                }
                 setError(msg);
                 return;
             }
