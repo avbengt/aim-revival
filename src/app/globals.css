@@ -12,15 +12,136 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
+/* @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
-}
+} */
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  overflow: hidden;
+}
+
+.title-bar {
+  height: 30px !important;
+  font-size: 14px;
+}
+
+footer {
+  font-family: Tahoma, Geneva, Verdana, sans-serif !important;
+  color: #ffffff;
+  padding: 0 !important;
+  height: 30px !important;
+}
+
+
+
+
+footer button.start {
+  all: unset;
+  width: 97px;
+  /* or whatever fits your image */
+  height: 31px;
+  background-image: url("/layout/start-bg.png");
+  background-repeat: no-repeat;
+  background-size: cover;
+  border: none;
+  cursor: pointer;
+  font-family: Arial, sans-serif;
+  color: white;
+  padding-left: 8px;
+  font-size: 18px;
+  font-weight: 900;
+  font-style: italic;
+  text-shadow: 1px 2px 3px rgba(0, 0, 0, 0.5);
+}
+
+footer button.start:hover {
+  background-position: 0 -34px;
+  box-shadow: none;
+}
+
+footer button.start:active {
+  background-image: url("/layout/start-bg.png");
+  background-repeat: no-repeat;
+  background-size: cover;
+  border: none;
+  cursor: pointer;
+  color: white;
+  padding-left: 8px;
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+  font-weight: 900;
+  font-style: italic;
+  text-shadow: 1px 2px 3px rgba(0, 0, 0, 0.5);
+  background-position: 0 -69px !important;
+}
+
+footer .clock {
+  font-size: 12px !important;
+  font-weight: normal;
+  text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.system-tray {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(to bottom, #24b5fe 0%, #1386e0 8%, #1386e0 40%, #1194ec 88%, #1194ec 93%, #147fdf 95%, #0060be 96%, #0061bf 100%);
+  height: 29px;
+  border-left: 1px solid #29c6fb;
+  box-shadow: 1px 0px 0px 0px #2eb1ea, 0px 0px 0px 0px #2ac5fd, -1px 0px 0px 0px #003880;
+  padding: 0 5px 0 0px;
+}
+
+.login-window {
+  position: absolute;
+}
+
+.login-header {
+  cursor: move;
+}
+
+.taskbar-button {
+  background: #3980f4 !important;
+  width: 160px;
+  height: 26px;
+  box-shadow: inset 1px 1px 4px #62a0ff, inset -1px -1px 2px #2458c7;
+  text-align: left;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  border: 1px solid #1d55c5;
+  text-shadow: 0.5px 0.5px 0 #00000033;
+  transition: filter;
+  outline: none;
+}
+
+.taskbar-button:hover {
+  box-shadow: inset 1px 1px 4px #62a0ff, inset -1px -1px 2px #2458c7 !important;
+  filter: brightness(1.1);
+  outline: none;
+}
+
+.taskbar-button:focus,
+.taskbar-button.focused {
+  outline: none !important;
+  box-shadow: inset 1px 1px 4px #62a0ff, inset -1px -1px 2px #2458c7;
+}
+
+.taskbar-button:active,
+.taskbar-button.active {
+  background: #1d49be !important;
+  width: 160px;
+  height: 26px;
+  box-shadow: inset 1px 1px 4px #002988, inset -1px -1px 2px #255dc5 !important;
+  text-align: left;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  border: 1px solid #063ca7;
+  text-shadow: 0.5px 0.5px 0 #00000033;
+  transition: filter;
+  outline: none;
 }
