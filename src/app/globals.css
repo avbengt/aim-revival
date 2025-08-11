@@ -101,8 +101,20 @@ footer .clock {
   position: absolute;
 }
 
+#login-window {
+  position: fixed !important;
+  /* ignore positioned ancestors */
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
 .login-header {
   cursor: move;
+}
+
+.title-bar {
+  user-select: none;
 }
 
 .taskbar-button {

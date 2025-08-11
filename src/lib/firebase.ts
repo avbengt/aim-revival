@@ -10,12 +10,12 @@ import { getDatabase } from "firebase/database";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-    apiKey: "AIzaSyCie0kwF2oZDrvkdxTboQZeJ5WMywaExWw",
-    authDomain: "aim-revival.firebaseapp.com",
-    projectId: "aim-revival",
-    storageBucket: "aim-revival.firebasestorage.app",
-    messagingSenderId: "163074052702",
-    appId: "1:163074052702:web:0fc2ceadcba87e839e1acf"
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
 // Avoid re-initializing if app already exists

@@ -1,73 +1,38 @@
 "use client";
-
-import { useEffect } from "react";
+import { useRef } from "react";
+import { useDraggableWindow } from "@/hooks/useDraggableWindow";
 import { useWindowManager } from "@context/WindowManagerContext";
 
-
 export default function BuddyListWindow() {
-    const { setBuddyListVisible } = useWindowManager();
+    const { buddyListVisible, setBuddyListVisible } = useWindowManager();
+    const winRef = useRef<HTMLDivElement>(null);
 
+    useDraggableWindow(winRef, {
+        headerSelector: ".buddylist-header",
+        disabled: !buddyListVisible,
+        storageKey: "pos_buddylist_window",
+        centerOnFirstPaint: true,
+    });
 
-    useEffect(() => {
-        const buddyEl = document.getElementById("buddylist-window");
-        const header = document.getElementById("buddylist-header");
-
-        if (!buddyEl || !header) return;
-
-        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-
-        const dragMouseDown = (e: MouseEvent) => {
-            e.preventDefault();
-            pos3 = e.clientX;
-            pos4 = e.clientY;
-            document.addEventListener("mouseup", closeDragElement);
-            document.addEventListener("mousemove", elementDrag);
-        };
-
-        const elementDrag = (e: MouseEvent) => {
-            e.preventDefault();
-            pos1 = pos3 - e.clientX;
-            pos2 = pos4 - e.clientY;
-            pos3 = e.clientX;
-            pos4 = e.clientY;
-
-            const newTop = buddyEl.offsetTop - pos2;
-            const newLeft = buddyEl.offsetLeft - pos1;
-
-            const winWidth = buddyEl.offsetWidth;
-            const winHeight = buddyEl.offsetHeight;
-            const screenWidth = window.innerWidth;
-            const screenHeight = window.innerHeight;
-
-            const clampedTop = Math.max(0, Math.min(newTop, screenHeight - winHeight));
-            const clampedLeft = Math.max(0, Math.min(newLeft, screenWidth - winWidth));
-
-            buddyEl.style.top = `${clampedTop}px`;
-            buddyEl.style.left = `${clampedLeft}px`;
-        };
-
-        const closeDragElement = () => {
-            document.removeEventListener("mouseup", closeDragElement);
-            document.removeEventListener("mousemove", elementDrag);
-        };
-
-        header.addEventListener("mousedown", dragMouseDown);
-        return () => header.removeEventListener("mousedown", dragMouseDown);
-    }, []);
-
-    return (
-        <div id="buddylist-window" className="window buddylist-window w-[300px] h-[500px] absolute top-[100px] left-[100px]">
-            <div id="buddylist-header" className="title-bar">
+    return buddyListVisible ? (
+        <div
+            ref={winRef}
+            id="buddylist-window"
+            className="window w-[280px] h-[520px] absolute z-50"
+        >
+            <div className="title-bar buddylist-header">
                 <div className="title-bar-text">Buddy List</div>
                 <div className="title-bar-controls">
-                    <button aria-label="Minimize" onClick={() => setBuddyListVisible(false)}></button>
-                    <button aria-label="Maximize"></button>
-                    <button onClick={() => setBuddyListVisible(false)} aria-label="Close"></button>
+                    <button aria-label="Minimize" onClick={() => setBuddyListVisible(false)} />
+                    <button aria-label="Maximize" />
+                    <button aria-label="Close" />
                 </div>
             </div>
-            <div className="window-body">
-                <p>Welcome to AIM Revival!</p>
+
+            <div className="window-body p-2">
+                {/* your real buddy list content goes here */}
+                <p className="text-sm">Coming soon: buddies!</p>
             </div>
         </div>
-    );
+    ) : null;
 }
