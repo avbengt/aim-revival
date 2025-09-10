@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 
 export default function Clock() {
-    const [time, setTime] = useState<string>(() =>
+    const [time, setTime] = useState(() =>
         new Date().toLocaleTimeString([], {
             hour: "numeric",
             minute: "2-digit",

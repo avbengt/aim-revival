@@ -1,116 +1,230 @@
 "use client";
-
 import { useEffect, useRef } from "react";
 
 export function useDraggableWindow(
     winRef,
-    {
-        headerSelector,
-        disabled = false,
-        storageKey,
-        centerOnFirstPaint = true,
-    } = {}
+    { headerSelector, storageKey, centerOnFirstPaint = true, alwaysCenter = false } = {}
 ) {
-    const startedOnce = useRef(false);
+    const centeredOnce = useRef(false);
 
     useEffect(() => {
         const el = winRef.current;
-        if (!el || disabled) return;
+        if (!el) return;
 
-        const style = window.getComputedStyle(el);
-        if (style.position === "static") el.style.position = "absolute";
+        // Reset centered flag when element is remounted
+        centeredOnce.current = false;
 
-        const restore = () => {
-            if (storageKey) {
-                const raw = localStorage.getItem(storageKey);
-                if (raw) {
-                    try {
-                        const parsed = JSON.parse(raw);
-                        if (
-                            parsed &&
-                            typeof parsed.top === "number" &&
-                            typeof parsed.left === "number"
-                        ) {
-                            el.style.top = `${parsed.top}px`;
-                            el.style.left = `${parsed.left}px`;
-                            return;
-                        }
-                    } catch { }
-                }
-            }
-            if (!startedOnce.current && centerOnFirstPaint) {
-                const vw = window.innerWidth;
-                const vh = window.innerHeight;
-                const rect = el.getBoundingClientRect();
-                el.style.top = `${Math.max(0, Math.floor((vh - rect.height) / 2))}px`;
-                el.style.left = `${Math.max(0, Math.floor((vw - rect.width) / 2))}px`;
-                startedOnce.current = true;
-            } else {
-                if (!el.style.top) el.style.top = "0px";
-                if (!el.style.left) el.style.left = "0px";
-            }
+        // Always use absolute positioning and kill conflicting sides/shorthand
+        const clearConflicts = () => {
+            // Store current positioning before clearing conflicts
+            const currentLeft = el.style.left;
+            const currentTop = el.style.top;
+
+            el.style.position = "absolute";
+            el.style.removeProperty("inset");
+            el.style.right = "auto";
+            el.style.bottom = "auto";
+            el.style.removeProperty("transform");
+
+            // Restore positioning if it was set
+            if (currentLeft) el.style.left = currentLeft;
+            if (currentTop) el.style.top = currentTop;
         };
+
+        const clampToViewport = (left, top) => {
+            // Allow unlimited dragging - no boundaries
+            return {
+                left: left,
+                top: top,
+            };
+        };
+
+        // Restore/center with clamping
+        const restore = () => {
+            clearConflicts();
+
+            let restored = false;
+            if (storageKey && !alwaysCenter) {
+                try {
+                    const raw = localStorage.getItem(storageKey);
+                    if (raw) {
+                        const { top, left } = JSON.parse(raw);
+                        if (typeof top === "number" && typeof left === "number") {
+                            const { left: L, top: T } = clampToViewport(left, top);
+                            el.style.left = `${L}px`;
+                            el.style.top = `${T}px`;
+                            restored = true;
+                        }
+                    }
+                } catch { }
+            }
+
+            // Center only once if nothing restored
+            if (!restored && centerOnFirstPaint && !centeredOnce.current) {
+                // Convert transform-based centering to absolute positioning
+                const computedStyle = window.getComputedStyle(el);
+                if (computedStyle.transform !== "none" && computedStyle.transform !== "") {
+                    // Element is using transform centering, convert to absolute positioning
+                    const rect = el.getBoundingClientRect();
+                    const vw = window.innerWidth;
+                    const vh = window.innerHeight;
+                    const L = Math.max(0, Math.floor((vw - rect.width) / 2));
+                    const T = Math.max(0, Math.floor((vh - rect.height) / 2));
+                    el.style.left = `${L}px`;
+                    el.style.top = `${T}px`;
+                    el.style.transform = "none";
+                } else {
+                    // Element is already using absolute positioning, just center it
+                    const rect = el.getBoundingClientRect();
+                    const vw = window.innerWidth;
+                    const vh = window.innerHeight;
+                    const L = Math.max(0, Math.floor((vw - rect.width) / 2));
+                    const T = Math.max(0, Math.floor((vh - rect.height) / 2));
+                    el.style.left = `${L}px`;
+                    el.style.top = `${T}px`;
+                }
+                centeredOnce.current = true;
+            }
+
+            // Ensure numeric fallback
+            if (!el.style.top) el.style.top = "0px";
+            if (!el.style.left) el.style.left = "0px";
+        };
+
         restore();
 
-        const header = headerSelector ? el.querySelector(headerSelector) : el;
-        if (!header) return;
-
-        let startX = 0;
-        let startY = 0;
-        let startLeft = 0;
-        let startTop = 0;
-        let dragging = false;
-
-        const onPointerDown = (e) => {
-            if (e.button !== 0) return;
-            dragging = true;
-            header.setPointerCapture(e.pointerId);
-
-            startLeft = parseInt(el.style.left || "0", 10);
-            startTop = parseInt(el.style.top || "0", 10);
-            startX = e.clientX;
-            startY = e.clientY;
-        };
-
-        const onPointerMove = (e) => {
-            if (!dragging) return;
-
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-
-            const nextLeft = startLeft + dx;
-            const nextTop = startTop + dy;
-
-            const vw = window.innerWidth;
-            const vh = window.innerHeight;
-            const rect = el.getBoundingClientRect();
-            const maxLeft = vw - rect.width;
-            const maxTop = vh - rect.height;
-
-            el.style.left = `${Math.min(Math.max(0, nextLeft), Math.max(0, maxLeft))}px`;
-            el.style.top = `${Math.min(Math.max(0, nextTop), Math.max(0, maxTop))}px`;
-        };
-
-        const onPointerUp = (e) => {
-            if (!dragging) return;
-            dragging = false;
-            header.releasePointerCapture(e.pointerId);
-
-            if (storageKey) {
-                const top = parseInt(el.style.top || "0", 10);
-                const left = parseInt(el.style.left || "0", 10);
-                localStorage.setItem(storageKey, JSON.stringify({ top, left }));
+        // Use setTimeout to ensure DOM is fully ready
+        setTimeout(() => {
+            const header = headerSelector ? el.querySelector(headerSelector) : el;
+            if (!header) {
+                console.log("useDraggableWindow: Header not found after delay");
+                return;
             }
-        };
 
-        header.addEventListener("pointerdown", onPointerDown);
-        window.addEventListener("pointermove", onPointerMove);
-        window.addEventListener("pointerup", onPointerUp);
+            console.log("useDraggableWindow: Header found, attaching listeners");
 
-        return () => {
-            header.removeEventListener("pointerdown", onPointerDown);
-            window.removeEventListener("pointermove", onPointerMove);
-            window.removeEventListener("pointerup", onPointerUp);
-        };
-    }, [winRef, headerSelector, disabled, storageKey, centerOnFirstPaint]);
+            header.style.touchAction = "none";
+            header.style.userSelect = "none";
+
+            let startX = 0,
+                startY = 0,
+                startLeft = 0,
+                startTop = 0,
+                dragging = false;
+
+            const isInControls = (target) => {
+                if (!target) return false;
+                return target.closest?.(".title-bar-controls") ||
+                    target.closest?.("button") ||
+                    target.tagName === "BUTTON";
+            };
+
+            // --- Pointer API (no pointer capture; listen on window) ---
+            const onPointerDown = (e) => {
+                console.log("useDraggableWindow: Pointer down event triggered");
+                if (e.button !== 0) return;
+                if (isInControls(e.target)) {
+                    console.log("useDraggableWindow: Clicked on controls, ignoring");
+                    return;
+                }
+                console.log("useDraggableWindow: Starting drag");
+                dragging = true;
+                clearConflicts();
+                startLeft = parseInt(el.style.left || "0", 10);
+                startTop = parseInt(el.style.top || "0", 10);
+                startX = e.clientX;
+                startY = e.clientY;
+            };
+
+            const onPointerMove = (e) => {
+                if (!dragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                const { left, top } = clampToViewport(startLeft + dx, startTop + dy);
+                el.style.left = `${left}px`;
+                el.style.top = `${top}px`;
+            };
+
+            const onPointerUp = () => {
+                if (!dragging) return;
+                dragging = false;
+                if (storageKey) {
+                    localStorage.setItem(
+                        storageKey,
+                        JSON.stringify({
+                            top: parseInt(el.style.top || "0", 10),
+                            left: parseInt(el.style.left || "0", 10),
+                        })
+                    );
+                }
+            };
+
+            // --- Mouse fallback (older Safari) ---
+            const onMouseDown = (e) => {
+                if (e.button !== 0) return;
+                if (isInControls(e.target)) return;
+                dragging = true;
+                clearConflicts();
+                startLeft = parseInt(el.style.left || "0", 10);
+                startTop = parseInt(el.style.top || "0", 10);
+                startX = e.clientX;
+                startY = e.clientY;
+                window.addEventListener("mousemove", onMouseMove);
+                window.addEventListener("mouseup", onMouseUp);
+            };
+
+            const onMouseMove = (e) => {
+                if (!dragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                const { left, top } = clampToViewport(startLeft + dx, startTop + dy);
+                el.style.left = `${left}px`;
+                el.style.top = `${top}px`;
+            };
+
+            const onMouseUp = () => {
+                if (!dragging) return;
+                dragging = false;
+                window.removeEventListener("mousemove", onMouseMove);
+                window.removeEventListener("mouseup", onMouseUp);
+                if (storageKey) {
+                    localStorage.setItem(
+                        storageKey,
+                        JSON.stringify({
+                            top: parseInt(el.style.top || "0", 10),
+                            left: parseInt(el.style.left || "0", 10),
+                        })
+                    );
+                }
+            };
+
+            header.addEventListener("pointerdown", onPointerDown);
+            window.addEventListener("pointermove", onPointerMove);
+            window.addEventListener("pointerup", onPointerUp);
+            header.addEventListener("mousedown", onMouseDown);
+
+            // Re‑clamp if viewport changes (e.g., rotate phone)
+            const onResize = () => {
+                const left = parseInt(el.style.left || "0", 10);
+                const top = parseInt(el.style.top || "0", 10);
+                const { left: L, top: T } = clampToViewport(left, top);
+                el.style.left = `${L}px`;
+                el.style.top = `${T}px`;
+            };
+            window.addEventListener("resize", onResize);
+
+            return () => {
+                // Reset dragging state
+                dragging = false;
+
+                header.removeEventListener("pointerdown", onPointerDown);
+                window.removeEventListener("pointermove", onPointerMove);
+                window.removeEventListener("pointerup", onPointerUp);
+                header.removeEventListener("mousedown", onMouseDown);
+                window.removeEventListener("mousemove", onMouseMove);
+                window.removeEventListener("mouseup", onMouseUp);
+                window.removeEventListener("resize", onResize);
+            };
+        }, 0); // Close setTimeout
+    }, [winRef, headerSelector, storageKey, centerOnFirstPaint, alwaysCenter]);
 }

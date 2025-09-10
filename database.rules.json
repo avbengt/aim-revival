@@ -1,0 +1,41 @@
+{
+    "rules": {
+        "status": {
+            ".read": "auth != null",
+            "$uid": {
+                ".write": "auth != null && auth.uid == $uid"
+            }
+        },
+        "users": {
+            "$uid": {
+                ".read": "auth != null",
+                ".write": "auth != null && auth.uid == $uid"
+            }
+        },
+        "buddyLists": {
+            "$uid": {
+                ".read": "auth != null && auth.uid == $uid",
+                ".write": "auth != null && auth.uid == $uid",
+                "$category": {
+                    "$buddyId": {
+                        ".read": "auth != null && auth.uid == $uid",
+                        ".write": "auth != null && auth.uid == $uid"
+                    }
+                }
+            }
+        },
+        "chats": {
+            ".read": "auth != null",
+            "$chatId": {
+                ".read": "auth != null && $chatId.contains(auth.uid)",
+                ".write": "auth != null && $chatId.contains(auth.uid)",
+                "messages": {
+                    "$messageId": {
+                        ".read": "auth != null && $chatId.contains(auth.uid)",
+                        ".write": "auth != null && $chatId.contains(auth.uid)"
+                    }
+                }
+            }
+        }
+    }
+}

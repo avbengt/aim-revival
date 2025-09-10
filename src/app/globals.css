@@ -29,6 +29,7 @@ body {
 .title-bar {
   height: 30px !important;
   font-size: 14px;
+  user-select: none;
 }
 
 footer {
@@ -37,8 +38,6 @@ footer {
   padding: 0 !important;
   height: 30px !important;
 }
-
-
 
 
 footer button.start {
@@ -97,25 +96,18 @@ footer .clock {
   padding: 0 5px 0 0px;
 }
 
+.window-body {
+  margin-top: 0;
+}
+
 .login-window {
   position: absolute;
 }
 
-#login-window {
-  position: fixed !important;
-  /* ignore positioned ancestors */
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-}
-
-.login-header {
+/* .login-header,
+.buddylist-header {
   cursor: move;
-}
-
-.title-bar {
-  user-select: none;
-}
+} */
 
 .taskbar-button {
   background: #3980f4 !important;
@@ -129,6 +121,9 @@ footer .clock {
   text-shadow: 0.5px 0.5px 0 #00000033;
   transition: filter;
   outline: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .taskbar-button:hover {
@@ -156,4 +151,80 @@ footer .clock {
   text-shadow: 0.5px 0.5px 0 #00000033;
   transition: filter;
   outline: none;
+}
+
+/* Windows XP UI Font - Menu Toolbar */
+.menu-toolbar span {
+  font-family: "Pixelated MS Sans Serif", Arial;
+}
+
+/* Windows XP Style Border */
+.xp-border {
+  border: 1px solid #a7a3a0;
+  box-shadow:
+    inset 1px 1px 0 #fffefb,
+    inset -1px -1px 0 #808080,
+    1px 1px 0 #fffefb,
+    -1px -1px 0 #808080;
+}
+
+/* Selected user styling */
+.selected-user {
+  background-color: #fffd00 !important;
+}
+
+/* Prevent text selection on user items */
+.user-item {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Disable hover effects on disabled maximize button */
+.title-bar-controls button[disabled] {
+  pointer-events: none;
+}
+
+/* Inactive window styling */
+.window-inactive .title-bar {
+  position: relative;
+}
+
+.window-inactive .title-bar::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+  z-index: 1;
+  border-radius: 8px 7px 0 0;
+}
+
+.title-bar-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-wrap: nowrap;
+}
+
+.window-inactive .title-bar-text {
+  position: relative;
+  z-index: 2;
+  text-shadow: none;
+}
+
+.window-inactive .title-bar-controls {
+  position: relative;
+  z-index: 2;
+}
+
+.window-inactive {
+  position: relative;
+}
+
+.window-inactive .menu-toolbar {
+  color: #aca899;
 }

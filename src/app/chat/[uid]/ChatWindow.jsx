@@ -16,28 +16,21 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
-type Message = {
-    id: string;
-    from: string;
-    to: string;
-    text: string;
-    timestamp: Timestamp;
-};
 export const metadata = {
     title: "Instant Message",
 };
 export default function ChatWindow() {
     const params = useParams();
-    const chatPartnerId = params.uid as string;
+    const chatPartnerId = params.uid;
     const searchParams = useSearchParams();
     const screenname = searchParams.get("screenname") || "Unknown User";
-    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    const [currentUserId, setCurrentUserId] = useState(null);
     const [message, setMessage] = useState("");
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [sessionStart] = useState<Date>(() => new Date());
-    const messagesEndRef = useRef<HTMLDivElement | null>(null);
-    const [myScreenname, setMyScreenname] = useState<string | null>(null);
-    const [theirScreenname, setTheirScreenname] = useState<string | null>(null);
+    const [messages, setMessages] = useState([]);
+    const [sessionStart] = useState(() => new Date());
+    const messagesEndRef = useRef(null);
+    const [myScreenname, setMyScreenname] = useState(null);
+    const [theirScreenname, setTheirScreenname] = useState(null);
 
 
     // Get current user ID
@@ -60,9 +53,9 @@ export default function ChatWindow() {
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const msgs: Message[] = snapshot.docs
+            const msgs = snapshot.docs
                 .map((doc) => {
-                    const data = doc.data() as Omit<Message, "id">;
+                    const data = doc.data();
                     return {
                         id: doc.id,
                         ...data,

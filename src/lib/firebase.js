@@ -13,6 +13,15 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+console.log('Firebase config:', {
+    apiKey: firebaseConfig.apiKey ? 'SET' : 'NOT SET',
+    authDomain: firebaseConfig.authDomain ? 'SET' : 'NOT SET',
+    projectId: firebaseConfig.projectId ? 'SET' : 'NOT SET',
+    storageBucket: firebaseConfig.storageBucket ? 'SET' : 'NOT SET',
+    messagingSenderId: firebaseConfig.messagingSenderId ? 'SET' : 'NOT SET',
+    appId: firebaseConfig.appId ? 'SET' : 'NOT SET',
+});
+
 // Avoid re-initializing during HMR
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
@@ -20,5 +29,7 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const database = getDatabase(app);
+
+console.log('Firebase services initialized:', { auth: !!auth, db: !!db, database: !!database });
 
 export { auth, db, database };
