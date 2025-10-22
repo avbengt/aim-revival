@@ -104,6 +104,11 @@ footer .clock {
   position: absolute;
 }
 
+#buddylist-window .window-body {
+  margin: 0 4px 4px 4px;
+}
+
+
 /* .login-header,
 .buddylist-header {
   cursor: move;
@@ -153,9 +158,14 @@ footer .clock {
   outline: none;
 }
 
-/* Windows XP UI Font - Menu Toolbar */
-.menu-toolbar span {
+/* General Pixelated Font Class */
+.pixelated-font {
   font-family: "Pixelated MS Sans Serif", Arial;
+}
+
+/* Checkbox positioning */
+input[type="checkbox"]:checked+label::after {
+  left: -18px;
 }
 
 /* Windows XP Style Border */
@@ -227,4 +237,46 @@ footer .clock {
 
 .window-inactive .menu-toolbar {
   color: #aca899;
+}
+
+.window.window-inactive {
+  box-shadow:
+    inset -1px -1px #4D61BC,
+    inset 1px 1px #526FE4,
+    inset -2px -2px #5665bc,
+    inset 2px 2px #5e8ff7,
+    inset -3px -3px #5777dc,
+    inset 3px 3px #5777dc;
+}
+
+/* Prevent width changes on inactive error windows only */
+.error-window.window-inactive {
+  width: fit-content !important;
+  min-width: fit-content;
+  max-width: none;
+}
+
+/* Test: Check if XP.css is causing lowercase conversion */
+body {
+  text-transform: none !important;
+}
+
+/* Override any potential lowercase conversion from XP.css */
+* {
+  text-transform: none !important;
+}
+
+/* Nuclear option - target all spans with screenname data attributes */
+span[data-original-screenname] {
+  text-transform: none !important;
+}
+
+/* Even more specific targeting */
+.user-item span {
+  text-transform: none !important;
+}
+
+/* Target the specific buddy list spans */
+.window span {
+  text-transform: none !important;
 }

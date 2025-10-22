@@ -6,8 +6,9 @@ import { database, auth } from "@/lib/firebase";
 import { useWindowManager } from "@/context/WindowManagerContext";
 
 export default function BuddyListWindow() {
-    const { buddyListVisible, setBuddyListVisible, setLoginWindowVisible, openChatWindow, focusWindow, isWindowActive, currentUserScreenname } = useWindowManager();
+    const { buddyListVisible, setBuddyListVisible, setLoginWindowVisible, openChatWindow, focusWindow, isWindowActive, currentUserScreenname, bringToFront, restorePreviousFocus, getWindowZIndex } = useWindowManager();
     const winRef = useRef(null);
+    const hasBeenPositionedRef = useRef(false);
     const [allUsers, setAllUsers] = useState([]);
     const [myBuddies, setMyBuddies] = useState({});
     const [loading, setLoading] = useState(true);
@@ -22,6 +23,12 @@ export default function BuddyListWindow() {
     });
     const [selectedUser, setSelectedUser] = useState(null);
     const [selectedSection, setSelectedSection] = useState(null);
+
+    // Function to preserve exact case from Firebase
+    const preserveExactCase = (screenname) => {
+        // Just return the screenname exactly as it comes from Firebase
+        return screenname;
+    };
 
     // Toggle section collapse/expand
     const toggleSection = (section) => {
@@ -169,6 +176,9 @@ export default function BuddyListWindow() {
     const handleMouseDown = (e) => {
         if (e.target.closest('.title-bar-controls')) return;
 
+        // Mark that the window has been positioned by the user
+        hasBeenPositionedRef.current = true;
+
         const startX = e.clientX;
         const startY = e.clientY;
         const startLeft = parseInt(winRef.current.style.left || "0", 10);
@@ -204,59 +214,72 @@ export default function BuddyListWindow() {
         document.addEventListener('mouseup', handleMouseUp);
     };
 
-    // Fetch all users and buddy lists
+    // Fetch buddy lists and only the users in your buddy list
     useEffect(() => {
         if (!buddyListVisible || !auth.currentUser) return;
 
-        const statusRef = ref(database, 'status');
+        // Auto-focus the buddy list window when it becomes visible
+        bringToFront('buddylist');
+
         const buddyListRef = ref(database, `buddyLists/${auth.currentUser.uid}`);
 
-        const unsubscribeStatus = onValue(statusRef, (snapshot) => {
-            const users = [];
-            const currentUser = auth.currentUser;
-
+        const unsubscribeBuddyList = onValue(buddyListRef, async (snapshot) => {
             if (snapshot.exists()) {
-                console.log('Status snapshot received:', snapshot.val());
-                snapshot.forEach((childSnapshot) => {
-                    const userData = childSnapshot.val();
-                    console.log(`User ${childSnapshot.key}:`, userData);
+                const buddyList = snapshot.val();
+                console.log('Buddy list received:', buddyList);
 
-                    // Skip the current user
-                    if (currentUser && childSnapshot.key === currentUser.uid) {
-                        console.log('Skipping current user:', childSnapshot.key);
-                        return;
-                    }
-
-                    // Only include users who have been online recently (within last 24 hours)
-                    // and have a lastSeen timestamp
-                    if (userData.lastSeen) {
-                        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-                        if (userData.lastSeen > oneDayAgo) {
-                            const user = {
-                                uid: childSnapshot.key,
-                                screenname: userData.screenname || `user_${childSnapshot.key.slice(0, 8)}`, // Fallback screenname
-                                lastSeen: userData.lastSeen,
-                                online: userData.online
-                            };
-                            console.log('Adding user to allUsers:', user);
-                            users.push(user);
-                        } else {
-                            console.log('Skipping old user:', childSnapshot.key, 'lastSeen:', userData.lastSeen);
-                        }
-                    } else {
-                        console.log('Skipping user without lastSeen:', childSnapshot.key);
+                // Extract all unique UIDs from buddy list
+                const buddyUids = new Set();
+                Object.values(buddyList).forEach(category => {
+                    if (category && typeof category === 'object') {
+                        Object.values(category).forEach(buddy => {
+                            if (buddy && buddy.uid) {
+                                buddyUids.add(buddy.uid);
+                            }
+                        });
                     }
                 });
-            }
 
-            console.log('Setting allUsers:', users);
-            setAllUsers(users);
-        });
+                console.log('Buddy UIDs to fetch:', Array.from(buddyUids));
 
-        const unsubscribeBuddyList = onValue(buddyListRef, (snapshot) => {
-            if (snapshot.exists()) {
-                setMyBuddies(snapshot.val());
+                // Only fetch status data for users in your buddy list
+                const users = [];
+                for (const uid of buddyUids) {
+                    try {
+                        const userStatusRef = ref(database, `status/${uid}`);
+                        const userSnapshot = await get(userStatusRef);
+
+                        if (userSnapshot.exists()) {
+                            const userData = userSnapshot.val();
+                            console.log(`=== FIREBASE DATA FOR UID ${uid} ===`);
+                            console.log('Full userData:', userData);
+                            console.log('userData.screenname:', userData.screenname);
+                            console.log('userData.screenname type:', typeof userData.screenname);
+                            console.log('userData.screenname length:', userData.screenname?.length);
+                            console.log('=== END FIREBASE DATA ===');
+
+                            if (userData.screenname) {
+                                const user = {
+                                    uid: uid,
+                                    screenname: userData.screenname,
+                                    lastSeen: userData.lastSeen,
+                                    online: userData.online
+                                };
+                                console.log('Adding buddy user:', user);
+                                users.push(user);
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching user ${uid}:`, error);
+                    }
+                }
+
+                console.log('Setting allUsers (buddy list only):', users);
+                setAllUsers(users);
+                setMyBuddies(buddyList);
             } else {
+                console.log('No buddy list found');
+                setAllUsers([]);
                 setMyBuddies({});
             }
             setLoading(false);
@@ -266,7 +289,6 @@ export default function BuddyListWindow() {
         });
 
         return () => {
-            off(statusRef, 'value', unsubscribeStatus);
             off(buddyListRef, 'value', unsubscribeBuddyList);
         };
     }, [buddyListVisible, auth.currentUser]);
@@ -275,20 +297,25 @@ export default function BuddyListWindow() {
     useEffect(() => {
         if (winRef.current) {
             if (buddyListVisible) {
-                // Position the window in the upper right area
-                const rect = winRef.current.getBoundingClientRect();
-                const vw = window.innerWidth;
-                const vh = window.innerHeight;
-                const left = Math.max(0, vw - rect.width - (vw * 0.1)); // 10% from right edge
-                const top = Math.max(0, vh * 0.1); // 10% from top edge
-                winRef.current.style.left = `${left}px`;
-                winRef.current.style.top = `${top}px`;
+                // Only position the window if it hasn't been positioned by the user yet
+                if (!hasBeenPositionedRef.current) {
+                    // Position the window in the upper right area
+                    const rect = winRef.current.getBoundingClientRect();
+                    const vw = window.innerWidth;
+                    const vh = window.innerHeight;
+                    const left = Math.max(0, vw - rect.width - (vw * 0.1)); // 10% from right edge
+                    const top = Math.max(0, vh * 0.1); // 10% from top edge
+                    winRef.current.style.left = `${left}px`;
+                    winRef.current.style.top = `${top}px`;
+                    hasBeenPositionedRef.current = true;
+                }
+
                 winRef.current.style.visibility = "visible";
             } else {
                 winRef.current.style.visibility = "hidden";
             }
         }
-    }, [buddyListVisible]);
+    }, [buddyListVisible]); // Only depend on buddyListVisible, not bringToFront
 
     // Helper function to get buddy list with online status
     const getBuddyListWithStatus = (category) => {
@@ -299,6 +326,7 @@ export default function BuddyListWindow() {
             return {
                 ...buddyData,
                 buddyId,
+                screenname: userData ? userData.screenname : buddyData.screenname, // Use correct screenname from status
                 online: userData ? userData.online : false,
                 lastSeen: userData ? userData.lastSeen : null
             };
@@ -351,16 +379,18 @@ export default function BuddyListWindow() {
 
     const counts = getCategoryCounts();
 
-    console.log('BuddyListWindow render - buddyListVisible:', buddyListVisible);
     if (!buddyListVisible) return null;
 
     return (
         <div
             ref={winRef}
             id="buddylist-window"
-            className={`window w-[250px] h-[600px] absolute z-50 ${isWindowActive('buddylist') ? '' : 'window-inactive'}`}
-            style={{ visibility: "hidden" }}
-            onMouseDown={() => focusWindow('buddylist')}
+            className={`window w-[220px] h-[550px] absolute ${!isWindowActive('buddylist') ? 'window-inactive' : ''}`}
+            style={{
+                visibility: "hidden",
+                zIndex: getWindowZIndex('buddylist')
+            }}
+            onMouseDown={() => bringToFront('buddylist')}
         >
             <div className="title-bar buddylist-header" onMouseDown={handleMouseDown}>
                 <div className="title-bar-text">
@@ -369,20 +399,26 @@ export default function BuddyListWindow() {
                 <div className="title-bar-controls">
                     <button aria-label="Minimize" onClick={() => setBuddyListVisible(false)} />
                     <button aria-label="Maximize" />
-                    <button aria-label="Close" />
+                    <button
+                        aria-label="Close"
+                        onClick={() => {
+                            setBuddyListVisible(false);
+                            restorePreviousFocus();
+                        }}
+                    />
                 </div>
             </div>
 
-            <div className="window-body p-1" onClick={handleContainerClick}>
+            <div className="window-body" onClick={handleContainerClick}>
                 {/* Menu Toolbar */}
-                <div className="border-b border-[#808080] px-2 py-1 flex items-center gap-4 menu-toolbar">
-                    <span>My AIM</span>
-                    <span>People</span>
-                    <span>Help</span>
+                <div className="py-0.5 px-2 flex items-center gap-2 menu-toolbar">
+                    <span className="pixelated-font">My AIM</span>
+                    <span className="pixelated-font">People</span>
+                    <span className="pixelated-font">Help</span>
                 </div>
 
-                <div className="">
-                    <img src="/assets/images/aim.png" alt="AIM" className="w-full h-full" />
+                <div className="bg-[#fffcef] flex justify-center mb-[1px]">
+                    <img src="/ui/bl-header.png" alt="AIM" className="" />
                 </div>
 
                 {loading ? (
@@ -391,7 +427,7 @@ export default function BuddyListWindow() {
                     <>
                         {/* Buddies Section */}
 
-                        <div className="bg-white p-1 min-h-[350px] xp-border">
+                        <div className="bg-white p-1 min-h-[300px] xp-border" style={{ backgroundImage: 'url(/ui/bl-bg.png)', backgroundSize: '150px auto', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
 
                             <div
                                 className={`text-sm font-bold cursor-pointer flex items-center user-item border border-transparent`}
@@ -426,7 +462,12 @@ export default function BuddyListWindow() {
                                                 <span className="mr-1 text-black inline-block w-4 text-center">
                                                     {/* Empty space to align with arrow */}
                                                 </span>
-                                                <span className={`text-sm font-medium ${buddy.online ? 'text-[#1d1272]' : 'text-[#a29e8f] italic'} ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}>
+                                                <span
+                                                    className={`text-sm font-medium ${buddy.online ? 'text-[#1d1272]' : 'text-[#a29e8f] italic'} ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}
+                                                    data-original-screenname={buddy.screenname}
+                                                    data-screenname-lower={buddy.screenname.toLowerCase()}
+                                                    style={{ textTransform: 'none !important' }}
+                                                >
                                                     {buddy.screenname}
                                                 </span>
                                             </div>
@@ -475,7 +516,12 @@ export default function BuddyListWindow() {
                                                 <span className="mr-1 text-black inline-block w-4 text-center">
                                                     {/* Empty space to align with arrow */}
                                                 </span>
-                                                <span className={`text-sm font-medium ${buddy.online ? 'text-[#1d1272]' : 'text-[#a29e8f] italic'} ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}>
+                                                <span
+                                                    className={`text-sm font-medium ${buddy.online ? 'text-[#1d1272]' : 'text-[#a29e8f] italic'} ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}
+                                                    data-original-screenname={buddy.screenname}
+                                                    data-screenname-lower={buddy.screenname.toLowerCase()}
+                                                    style={{ textTransform: 'none !important' }}
+                                                >
                                                     {buddy.screenname}
                                                 </span>
                                             </div>
@@ -524,7 +570,12 @@ export default function BuddyListWindow() {
                                                 <span className="mr-1 text-black inline-block w-4 text-center">
                                                     {/* Empty space to align with arrow */}
                                                 </span>
-                                                <span className={`text-sm font-medium ${buddy.online ? 'text-[#1d1272]' : 'text-[#a29e8f] italic'} ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}>
+                                                <span
+                                                    className={`text-sm font-medium ${buddy.online ? 'text-[#1d1272]' : 'text-[#a29e8f] italic'} ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}
+                                                    data-original-screenname={buddy.screenname}
+                                                    data-screenname-lower={buddy.screenname.toLowerCase()}
+                                                    style={{ textTransform: 'none !important' }}
+                                                >
                                                     {buddy.screenname}
                                                 </span>
                                             </div>
@@ -574,7 +625,12 @@ export default function BuddyListWindow() {
                                                     <span className="mr-1 text-black inline-block w-4 text-center">
                                                         {/* Empty space to align with arrow */}
                                                     </span>
-                                                    <span className={`text-sm font-medium text-[#a29e8f] italic ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}>
+                                                    <span
+                                                        className={`text-sm font-medium text-[#a29e8f] italic ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}
+                                                        data-original-screenname={buddy.screenname}
+                                                        data-screenname-lower={buddy.screenname.toLowerCase()}
+                                                        style={{ textTransform: 'none !important' }}
+                                                    >
                                                         {buddy.screenname}
                                                     </span>
                                                 </div>

@@ -14,7 +14,9 @@ export function WindowManagerProvider({ children }) {
     const [chatWindows, setChatWindows] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
     const [currentUserScreenname, setCurrentUserScreenname] = useState('User');
-    const [activeWindow, setActiveWindow] = useState(null); // Track which window is currently active
+    const [activeWindow, setActiveWindow] = useState(null);
+    const [focusHistory, setFocusHistory] = useState([]); // Track which window is currently active
+    const [windowZIndex, setWindowZIndex] = useState({}); // Track z-index for each window
     const chatWindowsRef = useRef([]); // Use ref to avoid dependency issues
     const lastProcessedMessageRef = useRef({}); // Track last processed message per chat room
     const loginTimestampRef = useRef(null); // Track when user logged in
@@ -77,6 +79,46 @@ export function WindowManagerProvider({ children }) {
         return activeWindow === windowId;
     };
 
+    const bringToFront = (windowId) => {
+        setActiveWindow(windowId);
+
+        // Update focus history - remove if already exists, then add to end
+        setFocusHistory(prev => {
+            const filtered = prev.filter(id => id !== windowId);
+            return [...filtered, windowId];
+        });
+
+        // Update z-index - give the focused window the highest z-index
+        setWindowZIndex(prev => {
+            const newZIndex = { ...prev };
+            // Find the current highest z-index
+            const maxZIndex = Math.max(...Object.values(newZIndex), 50);
+            // Set the focused window to be above all others
+            newZIndex[windowId] = maxZIndex + 1;
+            return newZIndex;
+        });
+    };
+
+    const restorePreviousFocus = () => {
+        setFocusHistory(prev => {
+            if (prev.length <= 1) {
+                // No previous window to restore
+                setActiveWindow(null);
+                return [];
+            }
+
+            // Remove the last (current) window and set the previous one as active
+            const newHistory = prev.slice(0, -1);
+            const previousWindow = newHistory[newHistory.length - 1];
+            setActiveWindow(previousWindow);
+            return newHistory;
+        });
+    };
+
+    const getWindowZIndex = (windowId) => {
+        return windowZIndex[windowId] || 50; // Default to 50 if not set
+    };
+
     // Track authentication state
     useEffect(() => {
         console.log('Setting up auth state listener...');
@@ -96,23 +138,49 @@ export function WindowManagerProvider({ children }) {
 
                 // Fetch current user's screenname from Firebase
                 const userStatusRef = ref(database, `status/${user.uid}`);
+                console.log('Setting up Firebase listener for user:', user.uid);
                 onValue(userStatusRef, (snapshot) => {
+                    console.log('Firebase snapshot for current user:', snapshot.exists() ? snapshot.val() : 'No data');
                     if (snapshot.exists()) {
                         const userData = snapshot.val();
                         if (userData.screenname) {
                             console.log('Setting current user screenname from Firebase:', userData.screenname);
+                            console.log('Screenname type:', typeof userData.screenname);
+                            console.log('Screenname length:', userData.screenname.length);
+                            console.log('Current screenname before setting:', currentUserScreenname);
+                            console.log('=== WINDOW MANAGER CONTEXT DEBUG ===');
+                            console.log('Firebase userData:', userData);
+                            console.log('About to set screenname to:', userData.screenname);
+                            console.log('=== END WINDOW MANAGER DEBUG ===');
                             setCurrentUserScreenname(userData.screenname);
+
+                            // Debug: Check what was actually set
+                            setTimeout(() => {
+                                console.log('=== SCREENNAME SET DEBUG ===');
+                                console.log('currentUserScreenname after set:', currentUserScreenname);
+                                console.log('=== END SCREENNAME SET DEBUG ===');
+                            }, 100);
                         } else {
-                            // Fallback: extract screenname from email, preserving case
-                            const emailScreenname = user.email?.split('@')[0] || 'User';
-                            console.log('Setting current user screenname from email:', emailScreenname);
-                            setCurrentUserScreenname(emailScreenname);
+                            // Only use email fallback if we don't already have a screenname set
+                            const currentScreenname = currentUserScreenname;
+                            if (currentScreenname === 'User' || !currentScreenname) {
+                                const emailScreenname = user.email?.split('@')[0] || 'User';
+                                console.log('Setting current user screenname from email (no Firebase screenname):', emailScreenname);
+                                setCurrentUserScreenname(emailScreenname);
+                            } else {
+                                console.log('Keeping existing screenname:', currentScreenname);
+                            }
                         }
                     } else {
-                        // No Firebase data yet, extract from email
-                        const emailScreenname = user.email?.split('@')[0] || 'User';
-                        console.log('Setting current user screenname from email (no Firebase data):', emailScreenname);
-                        setCurrentUserScreenname(emailScreenname);
+                        // Only use email fallback if we don't already have a screenname set
+                        const currentScreenname = currentUserScreenname;
+                        if (currentScreenname === 'User' || !currentScreenname) {
+                            const emailScreenname = user.email?.split('@')[0] || 'User';
+                            console.log('Setting current user screenname from email (no Firebase data):', emailScreenname);
+                            setCurrentUserScreenname(emailScreenname);
+                        } else {
+                            console.log('Keeping existing screenname (no Firebase data):', currentScreenname);
+                        }
                     }
                 });
             } else {
@@ -251,6 +319,9 @@ export function WindowManagerProvider({ children }) {
                 activeWindow,
                 focusWindow,
                 isWindowActive,
+                bringToFront,
+                restorePreviousFocus,
+                getWindowZIndex,
                 currentUserScreenname,
             }}
         >

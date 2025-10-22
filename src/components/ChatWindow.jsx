@@ -5,7 +5,7 @@ import { database, auth } from "@/lib/firebase";
 import { useWindowManager } from "@/context/WindowManagerContext";
 
 export default function ChatWindow({ recipientScreenname, recipientUid, chatId }) {
-    const { closeChatWindow, focusWindow, isWindowActive, chatWindows } = useWindowManager();
+    const { closeChatWindow, focusWindow, isWindowActive, chatWindows, bringToFront, restorePreviousFocus, getWindowZIndex } = useWindowManager();
     const winRef = useRef(null);
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState("");
@@ -137,6 +137,13 @@ export default function ChatWindow({ recipientScreenname, recipientUid, chatId }
         }
     }, [messages]);
 
+    // Auto-focus chat window when it becomes visible
+    useEffect(() => {
+        if (isVisible) {
+            bringToFront(chatId);
+        }
+    }, [isVisible, chatId]); // Only depend on isVisible and chatId, not bringToFront
+
     const handleSendMessage = async (e) => {
         e.preventDefault();
         if (!newMessage.trim() || !currentUser || !recipientUid) return;
@@ -175,9 +182,12 @@ export default function ChatWindow({ recipientScreenname, recipientUid, chatId }
         <div
             ref={winRef}
             id="chat-window"
-            className={`window w-[350px] h-[300px] absolute z-50 ${isWindowActive(chatId) ? '' : 'window-inactive'}`}
-            style={{ visibility: isVisible ? "visible" : "hidden" }}
-            onMouseDown={() => focusWindow(chatId)}
+            className={`window w-[350px] h-[300px] absolute ${!isWindowActive(chatId) ? 'window-inactive' : ''}`}
+            style={{
+                visibility: isVisible ? "visible" : "hidden",
+                zIndex: getWindowZIndex(chatId)
+            }}
+            onMouseDown={() => bringToFront(chatId)}
         >
             <div className="title-bar chat-header" onMouseDown={handleMouseDown}>
                 <div className="title-bar-text">
@@ -186,20 +196,26 @@ export default function ChatWindow({ recipientScreenname, recipientUid, chatId }
                 <div className="title-bar-controls">
                     <button aria-label="Minimize" />
                     <button aria-label="Maximize" />
-                    <button aria-label="Close" onClick={() => closeChatWindow(chatId)} />
+                    <button
+                        aria-label="Close"
+                        onClick={() => {
+                            closeChatWindow(chatId);
+                            restorePreviousFocus();
+                        }}
+                    />
                 </div>
             </div>
 
             <div className="window-body flex flex-col h-full relative" style={{ height: 'calc(100% - 30px)' }}>
                 {/* Menu Toolbar */}
-                <div className="border-b border-[#808080] px-2 py-1 flex items-center gap-4 menu-toolbar">
-                    <span>File</span>
-                    <span>Edit</span>
-                    <span>Insert</span>
-                    <span>People</span>
+                <div className="px-2 py-0.5 flex items-center gap-2 menu-toolbar">
+                    <span className="pixelated-font">File</span>
+                    <span className="pixelated-font">Edit</span>
+                    <span className="pixelated-font">Insert</span>
+                    <span className="pixelated-font">People</span>
                 </div>
                 {/* Messages Area */}
-                <div className="message-area h-[95px] bg-white border border-gray-300 p-2 overflow-y-auto mt-1 mb-0">
+                <div className="message-area h-[95px] bg-white border border-gray-300 p-2 overflow-y-auto mb-0">
                     {messages.length > 0 && (
                         <div className="space-y-1">
                             {messages.map((message, index) => {

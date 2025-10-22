@@ -1,6 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { ref, set, onDisconnect } from "firebase/database";
+import { signOut } from "firebase/auth";
 import { database, auth } from "@/lib/firebase";
 
 export default function OfflineHandler() {
@@ -21,32 +22,52 @@ export default function OfflineHandler() {
             }
         };
 
-        const handleBeforeUnload = async () => {
+        const handleBeforeUnload = () => {
             if (auth.currentUser) {
-                const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
-                try {
-                    await set(userStatusRef, {
-                        online: false,
-                        lastSeen: Date.now()
-                    });
-                    console.log('Set offline status on beforeunload for user:', auth.currentUser.uid);
-                } catch (error) {
-                    console.log('Error setting offline status on beforeunload:', error);
-                }
+                console.log('User is leaving page, setting offline and signing out');
+
+                // Use Firebase's built-in disconnect handler for offline status
+                // This is more reliable than trying to do it manually
+
+                // Sign out immediately - this will trigger the auth state change
+                // which will clean up the disconnect handler and set offline status
+                signOut(auth).catch(error => {
+                    console.log('Error signing out on beforeunload:', error);
+                });
+
+                console.log('Signed out user on beforeunload');
             }
         };
 
-        const handleVisibilityChange = async () => {
+        const handleVisibilityChange = () => {
+            // Only handle visibility change, don't sign out on tab switch
             if (document.visibilityState === 'hidden' && auth.currentUser) {
                 const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
                 try {
-                    await set(userStatusRef, {
+                    // Just set offline status, don't sign out on tab switch
+                    set(userStatusRef, {
                         online: false,
                         lastSeen: Date.now()
+                    }).catch(error => {
+                        console.log('Error setting offline status on visibility change:', error);
                     });
                     console.log('Set offline status on visibility change for user:', auth.currentUser.uid);
                 } catch (error) {
-                    console.log('Error setting offline status on visibility change:', error);
+                    console.log('Error in visibility change handler:', error);
+                }
+            } else if (document.visibilityState === 'visible' && auth.currentUser) {
+                // Set back to online when user returns to tab
+                const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
+                try {
+                    set(userStatusRef, {
+                        online: true,
+                        lastSeen: Date.now()
+                    }).catch(error => {
+                        console.log('Error setting online status on visibility change:', error);
+                    });
+                    console.log('Set online status on visibility change for user:', auth.currentUser.uid);
+                } catch (error) {
+                    console.log('Error setting online status:', error);
                 }
             }
         };
@@ -73,8 +94,9 @@ export default function OfflineHandler() {
                     }
                 }, 30000);
             } else {
-                // Clean up disconnect handler when user signs out
+                // User signed out - set them offline in Firebase
                 if (disconnectRef) {
+                    // Cancel the disconnect handler since user is signing out
                     disconnectRef.cancel();
                     disconnectRef = null;
                     console.log('Cleaned up disconnect handler');
@@ -85,14 +107,18 @@ export default function OfflineHandler() {
                     clearInterval(statusInterval);
                     statusInterval = null;
                 }
+
+                console.log('User signed out, they will show as offline to buddies');
             }
         });
 
         window.addEventListener('beforeunload', handleBeforeUnload);
+        window.addEventListener('pagehide', handleBeforeUnload);
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
+            window.removeEventListener('pagehide', handleBeforeUnload);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             unsubscribe();
 
