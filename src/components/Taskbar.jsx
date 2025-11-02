@@ -13,6 +13,7 @@ export default function Taskbar() {
         setChatWindowVisible,
         isWindowActive,
         currentUserScreenname,
+        bringToFront,
     } = useWindowManager();
 
     return (
@@ -47,7 +48,15 @@ export default function Taskbar() {
                                 ? "bg-[#d6d6d6] border-t border-l border-[#f5f5f5] border-r-2 border-b-2 border-[#808080]"
                                 : ""
                                 }`}
-                            onClick={() => setBuddyListVisible((prev) => !prev)}
+                            onClick={() => {
+                                if (buddyListVisible) {
+                                    // Minimize with animation
+                                    setBuddyListVisible(false);
+                                } else {
+                                    // Restore with animation
+                                    setBuddyListVisible(true);
+                                }
+                            }}
                         >
                             <img
                                 src="/login/running-man.svg"
@@ -66,7 +75,14 @@ export default function Taskbar() {
                                     }`}
                                 onClick={() => {
                                     console.log('Toggling chat window:', chat.id, 'Current visible:', chat.visible);
-                                    setChatWindowVisible(chat.id, !chat.visible);
+                                    if (!chat.visible) {
+                                        // If window is hidden, show it and bring to front
+                                        setChatWindowVisible(chat.id, true);
+                                        bringToFront(chat.id);
+                                    } else {
+                                        // If window is visible, minimize it
+                                        setChatWindowVisible(chat.id, false);
+                                    }
                                 }}
                             >
                                 <img

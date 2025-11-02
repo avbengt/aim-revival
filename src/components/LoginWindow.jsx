@@ -10,36 +10,49 @@ import { useWindowManager } from "@/context/WindowManagerContext";
 export default function LoginWindow() {
     const { loginWindowVisible, setLoginWindowVisible, setBuddyListVisible, bringToFront, isWindowActive, restorePreviousFocus, getWindowZIndex } = useWindowManager();
     const winRef = useRef(null);
+    const hasBeenPositionedBeforeRef = useRef(false);
 
     // Handle visibility and ensure proper positioning
     useEffect(() => {
         if (winRef.current) {
             if (loginWindowVisible) {
-                // Make sure the window is visible first
-                winRef.current.style.visibility = "visible";
+                // Keep window hidden until positioned to prevent flicker
+                winRef.current.style.visibility = "hidden";
 
-                // Check if we have a saved position
+                // Always center on initial page load (first time showing)
+                // Use saved position only if user has positioned it before
                 const savedPosition = localStorage.getItem("login-window-position");
-                if (savedPosition) {
+                if (savedPosition && hasBeenPositionedBeforeRef.current) {
                     try {
                         const { top, left } = JSON.parse(savedPosition);
                         if (typeof top === "number" && typeof left === "number") {
                             winRef.current.style.top = `${top}px`;
                             winRef.current.style.left = `${left}px`;
+                            // Make window visible after positioning
+                            winRef.current.style.visibility = "visible";
+                            return; // Exit early if we used saved position
                         }
                     } catch (e) {
                         console.log("Error parsing saved position:", e);
+                        // Fall through to center positioning
                     }
-                } else {
-                    // Center the window if no saved position
-                    const rect = winRef.current.getBoundingClientRect();
-                    const vw = window.innerWidth;
-                    const vh = window.innerHeight;
-                    const left = Math.max(0, Math.floor((vw - rect.width) / 2));
-                    const top = Math.max(0, Math.floor((vh - rect.height) / 2));
-                    winRef.current.style.left = `${left}px`;
-                    winRef.current.style.top = `${top}px`;
                 }
+
+                // Always center the window (on initial load or if saved position invalid)
+                // Use requestAnimationFrame to ensure window is rendered before calculating center
+                requestAnimationFrame(() => {
+                    if (winRef.current) {
+                        const rect = winRef.current.getBoundingClientRect();
+                        const vw = window.innerWidth;
+                        const vh = window.innerHeight;
+                        const left = Math.max(0, Math.floor((vw - rect.width) / 2));
+                        const top = Math.max(0, Math.floor((vh - rect.height) / 2));
+                        winRef.current.style.left = `${left}px`;
+                        winRef.current.style.top = `${top}px`;
+                        // Make window visible after positioning
+                        winRef.current.style.visibility = "visible";
+                    }
+                });
 
                 // Add manual drag functionality
                 const header = winRef.current.querySelector(".title-bar");
@@ -83,6 +96,8 @@ export default function LoginWindow() {
                         if (!dragging) return;
                         dragging = false;
 
+                        // Mark that user has positioned the window
+                        hasBeenPositionedBeforeRef.current = true;
                         // Save position
                         localStorage.setItem("login-window-position", JSON.stringify({
                             top: parseInt(winRef.current.style.top || "0", 10),
@@ -274,8 +289,9 @@ export default function LoginWindow() {
             const existingUserSnapshot = await get(userInfoRef);
 
             // Always use the screenname from the login form to preserve proper case
-            let finalScreenname = screenname;
-            console.log('Using screenname from login form:', finalScreenname);
+            // Trim to avoid issues with leading/trailing spaces
+            let finalScreenname = screenname.trim();
+            console.log('Using screenname from login form (trimmed):', finalScreenname);
 
             console.log('Setting user as online...');
             // Set user as online
@@ -439,7 +455,7 @@ export default function LoginWindow() {
                                     Get a Screen Name
                                 </p>
                                 {showTooltip && (
-                                    <div className="absolute top-[28px] left-8 bg-[#FFFFE1] border-1 border-black rounded-lg px-2 py-1 text-xs text-black z-50 w-[250px] shadow-lg tooltip-container  box-shadow-lg">
+                                    <div className="absolute top-[28px] left-8 bg-[#FFFFE1] border-1 border-black rounded-lg px-2 py-1 text-black z-50 w-[250px] shadow-lg tooltip-container box-shadow-lg pixelated-font">
                                         Just enter your desired screen name and password. You'll be automatically registered and can use them anytime to sign in!
                                         {/* SVG Arrow */}
                                         <svg className="absolute -top-3 left-3 w-3 h-3" viewBox="0 0 12 12">
@@ -557,7 +573,7 @@ export default function LoginWindow() {
                             <p className="pixelated-font">{error}</p>
                         </div>
                         <button
-                            className="px-4 py-2 bg-[#c0c0c0] border border-[#808080] pixelated-font text-sm hover:bg-[#d0d0d0]"
+                            className="px-4 py-2 bg-[#c0c0c0] border border-[#808080] pixelated-font hover:bg-[#d0d0d0]"
                             onClick={() => {
                                 setShowErrorWindow(false);
                                 setError("");

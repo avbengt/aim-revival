@@ -1,6 +1,6 @@
 "use client";
 import { useEffect } from "react";
-import { ref, set, onDisconnect } from "firebase/database";
+import { ref, set, update, onDisconnect, get } from "firebase/database";
 import { signOut } from "firebase/auth";
 import { database, auth } from "@/lib/firebase";
 
@@ -8,16 +8,39 @@ export default function OfflineHandler() {
     useEffect(() => {
         let disconnectRef = null;
 
-        const setupOfflineHandling = () => {
+        const setupOfflineHandling = async () => {
             if (auth.currentUser) {
                 const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
 
-                // Set up disconnect handler
+                // Get existing screenname to preserve it (check both status and users nodes)
+                let existingScreenname = null;
+                try {
+                    const statusSnapshot = await get(userStatusRef);
+                    if (statusSnapshot.exists()) {
+                        existingScreenname = statusSnapshot.val().screenname;
+                    }
+                    // If not in status, check users node
+                    if (!existingScreenname) {
+                        const userInfoRef = ref(database, `users/${auth.currentUser.uid}`);
+                        const userSnapshot = await get(userInfoRef);
+                        if (userSnapshot.exists()) {
+                            existingScreenname = userSnapshot.val().screenname;
+                        }
+                    }
+                } catch (error) {
+                    console.log('Could not get existing screenname:', error);
+                }
+
+                // Set up disconnect handler - preserve screenname if it exists
                 disconnectRef = onDisconnect(userStatusRef);
-                disconnectRef.update({
+                const disconnectData = {
                     online: false,
                     lastSeen: Date.now()
-                });
+                };
+                if (existingScreenname) {
+                    disconnectData.screenname = existingScreenname;
+                }
+                disconnectRef.update(disconnectData);
                 console.log('Set up disconnect handler for user:', auth.currentUser.uid);
             }
         };
@@ -39,35 +62,78 @@ export default function OfflineHandler() {
             }
         };
 
-        const handleVisibilityChange = () => {
+        const handleVisibilityChange = async () => {
             // Only handle visibility change, don't sign out on tab switch
             if (document.visibilityState === 'hidden' && auth.currentUser) {
                 const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
                 try {
-                    // Just set offline status, don't sign out on tab switch
-                    set(userStatusRef, {
+                    // Get existing screenname to preserve it (check both status and users nodes)
+                    let existingScreenname = null;
+                    try {
+                        const statusSnapshot = await get(userStatusRef);
+                        if (statusSnapshot.exists()) {
+                            existingScreenname = statusSnapshot.val().screenname;
+                        }
+                        // If not in status, check users node
+                        if (!existingScreenname) {
+                            const userInfoRef = ref(database, `users/${auth.currentUser.uid}`);
+                            const userSnapshot = await get(userInfoRef);
+                            if (userSnapshot.exists()) {
+                                existingScreenname = userSnapshot.val().screenname;
+                            }
+                        }
+                    } catch (e) {
+                        console.log('Could not get existing screenname:', e);
+                    }
+
+                    // Use update to preserve screenname field
+                    const updateData = {
                         online: false,
                         lastSeen: Date.now()
-                    }).catch(error => {
-                        console.log('Error setting offline status on visibility change:', error);
-                    });
+                    };
+                    if (existingScreenname) {
+                        updateData.screenname = existingScreenname;
+                    }
+                    await update(userStatusRef, updateData);
                     console.log('Set offline status on visibility change for user:', auth.currentUser.uid);
                 } catch (error) {
-                    console.log('Error in visibility change handler:', error);
+                    console.log('Error setting offline status on visibility change:', error);
                 }
             } else if (document.visibilityState === 'visible' && auth.currentUser) {
                 // Set back to online when user returns to tab
                 const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
                 try {
-                    set(userStatusRef, {
+                    // Get existing screenname to preserve it (check both status and users nodes)
+                    let existingScreenname = null;
+                    try {
+                        const statusSnapshot = await get(userStatusRef);
+                        if (statusSnapshot.exists()) {
+                            existingScreenname = statusSnapshot.val().screenname;
+                        }
+                        // If not in status, check users node
+                        if (!existingScreenname) {
+                            const userInfoRef = ref(database, `users/${auth.currentUser.uid}`);
+                            const userSnapshot = await get(userInfoRef);
+                            if (userSnapshot.exists()) {
+                                existingScreenname = userSnapshot.val().screenname;
+                            }
+                        }
+                    } catch (e) {
+                        console.log('Could not get existing screenname:', e);
+                    }
+
+                    // Use update to preserve screenname field
+                    const updateData = {
                         online: true,
                         lastSeen: Date.now()
-                    }).catch(error => {
-                        console.log('Error setting online status on visibility change:', error);
-                    });
+                    };
+                    if (existingScreenname) {
+                        updateData.screenname = existingScreenname;
+                    }
+                    await update(userStatusRef, updateData);
                     console.log('Set online status on visibility change for user:', auth.currentUser.uid);
                 } catch (error) {
-                    console.log('Error setting online status:', error);
+                    console.log('Error setting online status on visibility change:', error);
                 }
             }
         };
@@ -84,10 +150,34 @@ export default function OfflineHandler() {
                     if (auth.currentUser) {
                         const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
                         try {
-                            await set(userStatusRef, {
+                            // Get existing screenname to preserve it (check both status and users nodes)
+                            let existingScreenname = null;
+                            try {
+                                const statusSnapshot = await get(userStatusRef);
+                                if (statusSnapshot.exists()) {
+                                    existingScreenname = statusSnapshot.val().screenname;
+                                }
+                                // If not in status, check users node
+                                if (!existingScreenname && auth.currentUser) {
+                                    const userInfoRef = ref(database, `users/${auth.currentUser.uid}`);
+                                    const userSnapshot = await get(userInfoRef);
+                                    if (userSnapshot.exists()) {
+                                        existingScreenname = userSnapshot.val().screenname;
+                                    }
+                                }
+                            } catch (e) {
+                                console.log('Could not get existing screenname:', e);
+                            }
+
+                            // Use update to preserve screenname field
+                            const updateData = {
                                 online: true,
                                 lastSeen: Date.now()
-                            });
+                            };
+                            if (existingScreenname) {
+                                updateData.screenname = existingScreenname;
+                            }
+                            await update(userStatusRef, updateData);
                         } catch (error) {
                             console.log('Error updating lastSeen:', error);
                         }

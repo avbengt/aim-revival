@@ -158,9 +158,23 @@ footer .clock {
   outline: none;
 }
 
-/* General Pixelated Font Class */
-.pixelated-font {
-  font-family: "Pixelated MS Sans Serif", Arial;
+/* General Pixelated Font Class - override body antialiasing */
+.pixelated-font,
+.pixelated-font *,
+button.pixelated-font,
+button.pixelated-font *,
+.pixelated-font button,
+.pixelated-font button * {
+  font-family: "Pixelated MS Sans Serif", Arial !important;
+  font-size: 11px !important;
+  -webkit-font-smoothing: none !important;
+  -moz-osx-font-smoothing: unset !important;
+  text-rendering: auto !important;
+  font-smooth: never !important;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+  font-kerning: none !important;
+  font-variant-ligatures: none !important;
 }
 
 /* Checkbox positioning */
@@ -177,6 +191,7 @@ input[type="checkbox"]:checked+label::after {
     1px 1px 0 #fffefb,
     -1px -1px 0 #808080;
 }
+
 
 /* Selected user styling */
 .selected-user {
