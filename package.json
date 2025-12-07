@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "firebase": "^11.10.0",
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest",
+    "next": "15.3.6",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "xp.css": "^0.2.6"
   },
   "devDependencies": {
