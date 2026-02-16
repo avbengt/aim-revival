@@ -1,6 +1,7 @@
 import "xp.css/dist/XP.css";
 import "./globals.css";
 import { WindowManagerProvider } from "@/context/WindowManagerContext";
+import { SoundVolumeProvider } from "@/context/SoundVolumeContext";
 import LoginWindow from "@/components/LoginWindow";
 import BuddyListWindow from "@/components/BuddyListWindow";
 import ChatWindows from "@/components/ChatWindows";
@@ -17,14 +18,16 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body className="font-sans antialiased">
         <div className="fixed inset-0 z-0 bg-[url('/login/bliss-bg.jpg')] bg-cover bg-center bg-no-repeat">
-          <WindowManagerProvider>
-            {children}
-            <LoginWindow />
-            <BuddyListWindow />
-            <ChatWindows />
-            <Taskbar />
-            <OfflineHandler />
-          </WindowManagerProvider>
+          <SoundVolumeProvider>
+            <WindowManagerProvider>
+              {children}
+              <LoginWindow />
+              <BuddyListWindow />
+              <ChatWindows />
+              <Taskbar />
+              <OfflineHandler />
+            </WindowManagerProvider>
+          </SoundVolumeProvider>
         </div>
       </body>
     </html>

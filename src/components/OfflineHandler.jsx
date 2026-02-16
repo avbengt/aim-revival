@@ -62,81 +62,9 @@ export default function OfflineHandler() {
             }
         };
 
-        const handleVisibilityChange = async () => {
-            // Only handle visibility change, don't sign out on tab switch
-            if (document.visibilityState === 'hidden' && auth.currentUser) {
-                const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
-                try {
-                    // Get existing screenname to preserve it (check both status and users nodes)
-                    let existingScreenname = null;
-                    try {
-                        const statusSnapshot = await get(userStatusRef);
-                        if (statusSnapshot.exists()) {
-                            existingScreenname = statusSnapshot.val().screenname;
-                        }
-                        // If not in status, check users node
-                        if (!existingScreenname) {
-                            const userInfoRef = ref(database, `users/${auth.currentUser.uid}`);
-                            const userSnapshot = await get(userInfoRef);
-                            if (userSnapshot.exists()) {
-                                existingScreenname = userSnapshot.val().screenname;
-                            }
-                        }
-                    } catch (e) {
-                        console.log('Could not get existing screenname:', e);
-                    }
-
-                    // Use update to preserve screenname field
-                    const updateData = {
-                        online: false,
-                        lastSeen: Date.now()
-                    };
-                    if (existingScreenname) {
-                        updateData.screenname = existingScreenname;
-                    }
-                    await update(userStatusRef, updateData);
-                    console.log('Set offline status on visibility change for user:', auth.currentUser.uid);
-                } catch (error) {
-                    console.log('Error setting offline status on visibility change:', error);
-                }
-            } else if (document.visibilityState === 'visible' && auth.currentUser) {
-                // Set back to online when user returns to tab
-                const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
-                try {
-                    // Get existing screenname to preserve it (check both status and users nodes)
-                    let existingScreenname = null;
-                    try {
-                        const statusSnapshot = await get(userStatusRef);
-                        if (statusSnapshot.exists()) {
-                            existingScreenname = statusSnapshot.val().screenname;
-                        }
-                        // If not in status, check users node
-                        if (!existingScreenname) {
-                            const userInfoRef = ref(database, `users/${auth.currentUser.uid}`);
-                            const userSnapshot = await get(userInfoRef);
-                            if (userSnapshot.exists()) {
-                                existingScreenname = userSnapshot.val().screenname;
-                            }
-                        }
-                    } catch (e) {
-                        console.log('Could not get existing screenname:', e);
-                    }
-
-                    // Use update to preserve screenname field
-                    const updateData = {
-                        online: true,
-                        lastSeen: Date.now()
-                    };
-                    if (existingScreenname) {
-                        updateData.screenname = existingScreenname;
-                    }
-                    await update(userStatusRef, updateData);
-                    console.log('Set online status on visibility change for user:', auth.currentUser.uid);
-                } catch (error) {
-                    console.log('Error setting online status on visibility change:', error);
-                }
-            }
-        };
+        // Do not change online/offline status on tab switch (visibility change).
+        // Firebase onDisconnect will set offline when the tab is closed or the user navigates away.
+        // This prevents users from appearing "signed off" when they merely switch to another tab.
 
         let statusInterval = null;
 
@@ -204,12 +132,10 @@ export default function OfflineHandler() {
 
         window.addEventListener('beforeunload', handleBeforeUnload);
         window.addEventListener('pagehide', handleBeforeUnload);
-        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
             window.removeEventListener('pagehide', handleBeforeUnload);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
             unsubscribe();
 
             // Clean up disconnect handler

@@ -6,6 +6,7 @@ import { doc, setDoc } from "firebase/firestore";
 import { ref, set, onDisconnect, get } from "firebase/database";
 import { auth, db, database } from "@/lib/firebase";
 import { useWindowManager } from "@/context/WindowManagerContext";
+import { getSoundVolume } from "@/context/SoundVolumeContext";
 
 export default function LoginWindow() {
     const { loginWindowVisible, setLoginWindowVisible, setBuddyListVisible, bringToFront, isWindowActive, restorePreviousFocus, getWindowZIndex } = useWindowManager();
@@ -152,7 +153,7 @@ export default function LoginWindow() {
     const playErrorSound = () => {
         try {
             const audio = new Audio('/sounds/xp-error.mp3');
-            audio.volume = 0.7; // Set volume to 70%
+            audio.volume = getSoundVolume();
             audio.play().catch(error => {
                 console.log('Could not play error sound:', error);
             });
@@ -449,7 +450,7 @@ export default function LoginWindow() {
                             />
                             <div className="relative tooltip-container pixelated-font">
                                 <p
-                                    className="underline text-[#1d1272] cursor-pointer"
+                                    className="underline text-[#000000] cursor-pointer"
                                     onClick={() => setShowTooltip(!showTooltip)}
                                 >
                                     Get a Screen Name
@@ -494,7 +495,7 @@ export default function LoginWindow() {
                             />
                         </div>
 
-                        <p className="underline text-[#1d1272] mt-0 cursor-pointer pixelated-font">Forgot Password?</p>
+                        <p className="underline text-[#000000] mt-0 cursor-pointer pixelated-font">Forgot Password?</p>
                         <div className="flex items-center justify-between mt-2">
                             <input type="checkbox" id="savePass" />
                             <label htmlFor="savePass">Save password</label>

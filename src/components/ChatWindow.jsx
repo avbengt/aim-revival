@@ -3,9 +3,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { ref, push, onValue, off, get } from "firebase/database";
 import { database, auth } from "@/lib/firebase";
 import { useWindowManager } from "@/context/WindowManagerContext";
+import { useSoundVolume, getSoundVolume } from "@/context/SoundVolumeContext";
 
 export default function ChatWindow({ recipientScreenname, recipientUid, chatId }) {
     const { closeChatWindow, focusWindow, isWindowActive, chatWindows, bringToFront, restorePreviousFocus, getWindowZIndex, setChatWindowVisible, currentUserScreenname } = useWindowManager();
+    useSoundVolume(); // for volume slider; playback uses getSoundVolume()
     const winRef = useRef(null);
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState("");
@@ -170,6 +172,7 @@ export default function ChatWindow({ recipientScreenname, recipientUid, chatId }
                     hasPlayedRingRef.current = true;
                     lastRingPlayTimeRef.current = Date.now();
                     const ringAudio = new Audio('/sounds/ring.wav');
+                    ringAudio.volume = getSoundVolume();
                     ringAudio.play().catch(err => console.log('Error playing ring sound:', err));
 
                     // Update state and return early
@@ -203,6 +206,7 @@ export default function ChatWindow({ recipientScreenname, recipientUid, chatId }
                             hasPlayedRingRef.current = true;
                             lastRingPlayTimeRef.current = Date.now();
                             const ringAudio = new Audio('/sounds/ring.wav');
+                            ringAudio.volume = getSoundVolume();
                             ringAudio.play().catch(err => console.log('Error playing ring sound:', err));
                         } else {
                             // Ring was just played, just mark as played without playing again
@@ -213,6 +217,7 @@ export default function ChatWindow({ recipientScreenname, recipientUid, chatId }
                         if (receivedMessages.length > 1) {
                             receivedMessages.slice(1).forEach(() => {
                                 const receiveAudio = new Audio('/sounds/imrcv.wav');
+                                receiveAudio.volume = getSoundVolume();
                                 receiveAudio.play().catch(err => console.log('Error playing imrcv sound:', err));
                             });
                         }
@@ -220,6 +225,7 @@ export default function ChatWindow({ recipientScreenname, recipientUid, chatId }
                         // Ring has already been played, so play imrcv for all new messages
                         receivedMessages.forEach(() => {
                             const receiveAudio = new Audio('/sounds/imrcv.wav');
+                            receiveAudio.volume = getSoundVolume();
                             receiveAudio.play().catch(err => console.log('Error playing imrcv sound:', err));
                         });
                     }
@@ -319,6 +325,7 @@ export default function ChatWindow({ recipientScreenname, recipientUid, chatId }
 
             // Play send sound
             const sendAudio = new Audio('/sounds/imsend.wav');
+            sendAudio.volume = getSoundVolume();
             sendAudio.play().catch(err => console.log('Error playing imsend sound:', err));
         } catch (error) {
             console.error('Error sending message:', error);

@@ -32,7 +32,7 @@ export default function Taskbar() {
                         className={`taskbar-button ${loginWindowVisible
                             ? "bg-[#d6d6d6] border-t border-l border-[#f5f5f5] border-r-2 border-b-2 border-[#808080]"
                             : ""
-                            }`}
+                            } ${isWindowActive("login") ? "active" : ""}`}
                         onClick={() => setLoginWindowVisible((prev) => !prev)}
                     >
                         <img
@@ -47,7 +47,7 @@ export default function Taskbar() {
                             className={`taskbar-button ${buddyListVisible
                                 ? "bg-[#d6d6d6] border-t border-l border-[#f5f5f5] border-r-2 border-b-2 border-[#808080]"
                                 : ""
-                                }`}
+                                } ${isWindowActive("buddylist") ? "active" : ""}`}
                             onClick={() => {
                                 if (buddyListVisible) {
                                     // Minimize with animation
@@ -72,7 +72,7 @@ export default function Taskbar() {
                                 className={`taskbar-button ${chat.visible
                                     ? "bg-[#d6d6d6] border-t border-l border-[#f5f5f5] border-r-2 border-b-2 border-[#808080]"
                                     : ""
-                                    }`}
+                                    } ${isWindowActive(chat.id) ? "active" : ""}`}
                                 onClick={() => {
                                     console.log('Toggling chat window:', chat.id, 'Current visible:', chat.visible);
                                     if (!chat.visible) {

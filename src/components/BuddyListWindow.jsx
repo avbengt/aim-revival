@@ -4,9 +4,20 @@ import { ref, onValue, off, set, get, update, push, remove } from "firebase/data
 import { signOut } from "firebase/auth";
 import { database, auth } from "@/lib/firebase";
 import { useWindowManager } from "@/context/WindowManagerContext";
+import { useSoundVolume, getSoundVolume } from "@/context/SoundVolumeContext";
+
+// If lastSeen is older than this, treat user as offline (fixes stale "online" entries in Firebase)
+const STALE_ONLINE_MS = 2 * 60 * 1000; // 2 minutes
+
+function isEffectivelyOnline(userData) {
+    if (!userData || userData.online !== true) return false;
+    const lastSeen = userData.lastSeen || 0;
+    return (Date.now() - lastSeen) < STALE_ONLINE_MS;
+}
 
 export default function BuddyListWindow() {
     const { buddyListVisible, setBuddyListVisible, setLoginWindowVisible, openChatWindow, focusWindow, isWindowActive, currentUserScreenname, bringToFront, restorePreviousFocus, getWindowZIndex, isLoggedIn } = useWindowManager();
+    useSoundVolume(); // for volume slider; playback uses getSoundVolume()
     const winRef = useRef(null);
     const hasBeenPositionedRef = useRef(false);
     const [allUsers, setAllUsers] = useState([]);
@@ -28,6 +39,8 @@ export default function BuddyListWindow() {
     const [storedPosition, setStoredPosition] = useState(null);
     const [recentlySignedIn, setRecentlySignedIn] = useState(new Set());
     const [recentlySignedOut, setRecentlySignedOut] = useState(new Set());
+    const [contextMenu, setContextMenu] = useState(null); // { x, y, buddy, category }
+    const [, setStaleCheckTick] = useState(0); // Force re-render to re-evaluate stale-online
 
     // Refs for managing status listeners and timeouts
     const statusListenersRef = useRef(new Map());
@@ -362,6 +375,25 @@ export default function BuddyListWindow() {
         }
     };
 
+    // Right-click context menu for buddy rows
+    const handleBuddyContextMenu = (e, buddy, category) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectedUser(buddy.buddyId);
+        setSelectedSection(null);
+        setContextMenu({ x: e.clientX, y: e.clientY, buddy: { ...buddy, category }, category });
+    };
+
+    const closeContextMenu = () => setContextMenu(null);
+
+    // Close context menu when clicking outside
+    useEffect(() => {
+        if (!contextMenu) return;
+        const onDocClick = () => closeContextMenu();
+        document.addEventListener("click", onDocClick);
+        return () => document.removeEventListener("click", onDocClick);
+    }, [contextMenu]);
+
     // Simple drag handler
     const handleMouseDown = (e) => {
         if (e.target.closest('.title-bar-controls')) return;
@@ -544,6 +576,7 @@ export default function BuddyListWindow() {
                                         });
                                         // Play dooropen sound
                                         const doorOpenAudio = new Audio('/sounds/dooropen.wav');
+                                        doorOpenAudio.volume = getSoundVolume();
                                         doorOpenAudio.play().catch(err => console.log('Error playing dooropen sound:', err));
                                         // Set sign-in effect for 8 seconds
                                         setRecentlySignedIn(prev => {
@@ -576,6 +609,7 @@ export default function BuddyListWindow() {
                                         });
                                         // Play doorslam sound
                                         const doorSlamAudio = new Audio('/sounds/doorslam.wav');
+                                        doorSlamAudio.volume = getSoundVolume();
                                         doorSlamAudio.play().catch(err => console.log('Error playing doorslam sound:', err));
                                         // Set sign-out effect for 8 seconds
                                         setRecentlySignedOut(prev => {
@@ -735,6 +769,13 @@ export default function BuddyListWindow() {
         }
     }, [buddyListVisible]); // Only depend on buddyListVisible, not bringToFront
 
+    // Re-check stale online status every 60s when buddy list is visible
+    useEffect(() => {
+        if (!buddyListVisible) return;
+        const interval = setInterval(() => setStaleCheckTick((t) => t + 1), 60000);
+        return () => clearInterval(interval);
+    }, [buddyListVisible]);
+
     // Helper function to get buddy list with online status
     const getBuddyListWithStatus = (category) => {
         if (!myBuddies[category]) return [];
@@ -748,7 +789,7 @@ export default function BuddyListWindow() {
                 ...buddyData,
                 buddyId,
                 screenname: screenname, // Use correct screenname from status to preserve casing
-                online: userData ? userData.online : false,
+                online: isEffectivelyOnline(userData),
                 lastSeen: userData ? userData.lastSeen : null
             };
         }).sort((a, b) => a.screenname.localeCompare(b.screenname));
@@ -812,299 +853,288 @@ export default function BuddyListWindow() {
     }
 
     return (
-        <div
-            ref={winRef}
-            id="buddylist-window"
-            className={`window w-[220px] h-[550px] absolute ${!isWindowActive('buddylist') ? 'window-inactive' : ''}`}
-            style={{
-                visibility: "visible",
-                zIndex: getWindowZIndex('buddylist')
-            }}
-            onMouseDown={() => bringToFront('buddylist')}
-        >
-            <div className="title-bar buddylist-header" onMouseDown={handleMouseDown}>
-                <div className="title-bar-text">
-                    <img src="/ui/ico-buddylist.png" alt="" className="h-[16px] inline-block" /> {currentUserScreenname}'s Buddy List
-                </div>
-                <div className="title-bar-controls">
-                    <button aria-label="Minimize" onClick={() => setBuddyListVisible(false)} />
-                    <button aria-label="Maximize" />
-                    <button
-                        aria-label="Close"
-                        onClick={() => {
-                            setBuddyListVisible(false);
-                            restorePreviousFocus();
-                        }}
-                    />
-                </div>
-            </div>
-
-            <div className="window-body" onClick={handleContainerClick}>
-                {/* Menu Toolbar */}
-                <div className="py-0.5 px-2 flex items-center gap-2 menu-toolbar">
-                    <span className="pixelated-font">My AIM</span>
-                    <span className="pixelated-font">People</span>
-                    <span className="pixelated-font">Help</span>
+        <>
+            <div
+                ref={winRef}
+                id="buddylist-window"
+                className={`window w-[220px] h-[550px] absolute ${!isWindowActive('buddylist') ? 'window-inactive' : ''}`}
+                style={{
+                    visibility: "visible",
+                    zIndex: getWindowZIndex('buddylist')
+                }}
+                onMouseDown={() => bringToFront('buddylist')}
+            >
+                <div className="title-bar buddylist-header" onMouseDown={handleMouseDown}>
+                    <div className="title-bar-text">
+                        <img src="/ui/ico-buddylist.png" alt="" className="h-[16px] inline-block" /> {currentUserScreenname}'s Buddy List
+                    </div>
+                    <div className="title-bar-controls">
+                        <button aria-label="Minimize" onClick={() => setBuddyListVisible(false)} />
+                        <button aria-label="Maximize" />
+                        <button
+                            aria-label="Close"
+                            onClick={() => {
+                                setBuddyListVisible(false);
+                                restorePreviousFocus();
+                            }}
+                        />
+                    </div>
                 </div>
 
-                <div className="bg-[#fffcef] flex justify-center mb-[1px]">
-                    <img src="/ui/bl-header.png" alt="AIM" className="" />
-                </div>
+                <div className="window-body" onClick={handleContainerClick}>
+                    {/* Menu Toolbar */}
+                    <div className="py-0.5 px-2 flex items-center gap-2 menu-toolbar">
+                        <span className="pixelated-font">My AIM</span>
+                        <span className="pixelated-font">People</span>
+                        <span className="pixelated-font">Help</span>
+                    </div>
 
-                {loading ? (
-                    <div className="text-sm text-gray-600 py-2">Loading buddies...</div>
-                ) : (
-                    <>
-                        {/* Buddies Section */}
+                    <div className="bg-[#fffcef] flex justify-center mb-[1px]">
+                        <img src="/ui/bl-header.png" alt="AIM" className="" />
+                    </div>
 
-                        <div className="bg-white p-1 min-h-[300px] xp-border" style={{ backgroundImage: 'url(/ui/bl-bg.png)', backgroundSize: '150px auto', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
+                    {loading ? (
+                        <div className="text-sm text-gray-600 py-2">Loading buddies...</div>
+                    ) : (
+                        <>
+                            {/* Buddies Section */}
 
-                            <div
-                                className={`text-sm font-bold cursor-pointer flex items-center user-item border border-transparent`}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSectionClick('buddies');
-                                    toggleSection('buddies');
-                                }}
-                            >
-                                <img
-                                    src="/ui/bl-arrow.png"
-                                    alt=""
-                                    className={`w-[14px] mr-1 ${collapsedSections.buddies ? 'rotate-[-90deg]' : ''}`}
-                                />
-                                <span className={selectedSection === 'buddies' ? 'selected-user' : ''}>
-                                    Buddies ({counts.buddies.online}/{counts.buddies.total})
-                                </span>
-                            </div>
+                            <div className="bg-white p-1 min-h-[300px] xp-border" style={{ backgroundImage: 'url(/ui/bl-bg.png)', backgroundSize: '150px auto', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
 
-                            {!collapsedSections.buddies && getOnlineBuddies('buddies').length > 0 && (
-                                <div className="space-y-0">
-                                    {getOnlineBuddies('buddies').map((buddy) => (
-                                        <div
-                                            key={buddy.buddyId}
-                                            className={`flex items-center justify-between cursor-pointer border border-transparent user-item`}
-                                            onClick={() => handleUserSelect(buddy)}
-                                        >
-                                            <div
-                                                className="flex items-center flex-1"
-                                                onDoubleClick={(e) => handleUserDoubleClick(buddy, e)}
-                                            >
-                                                <span className="mr-1 text-black inline-block w-4 text-center">
-                                                    {/* Empty space to align with arrow */}
-                                                </span>
-                                                {recentlySignedOut.has(buddy.uid) ? (
-                                                    <img
-                                                        src="/ui/doorclose.png"
-                                                        alt=""
-                                                        className="h-[12px] w-[12px] mr-1"
-                                                    />
-                                                ) : recentlySignedIn.has(buddy.uid) ? (
-                                                    <img
-                                                        src="/ui/dooropen.png"
-                                                        alt=""
-                                                        className="h-[12px] w-[12px] mr-1"
-                                                    />
-                                                ) : null}
-                                                <span
-                                                    className={`text-sm ${recentlySignedOut.has(buddy.uid)
-                                                        ? 'font-medium text-[#a29e8f] italic'
-                                                        : recentlySignedIn.has(buddy.uid)
-                                                            ? 'font-bold text-[#1d1272]'
-                                                            : (buddy.online ? 'font-medium text-[#1d1272]' : 'font-medium text-[#a29e8f] italic')
-                                                        } ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}
-                                                    data-original-screenname={buddy.screenname}
-                                                    data-screenname-lower={buddy.screenname.toLowerCase()}
-                                                    style={{ textTransform: 'none !important' }}
-                                                >
-                                                    {buddy.screenname}
-                                                </span>
-                                            </div>
-                                            <button
-                                                onClick={() => handleRemoveBuddy(buddy.buddyId, 'buddies')}
-                                                className="text-red-500 hover:text-red-700 text-xs px-1"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    ))}
+                                <div
+                                    className={`text-sm font-bold cursor-pointer flex items-center user-item border border-transparent`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSectionClick('buddies');
+                                        toggleSection('buddies');
+                                    }}
+                                >
+                                    <img
+                                        src="/ui/bl-arrow.png"
+                                        alt=""
+                                        className={`w-[14px] mr-1 ${collapsedSections.buddies ? 'rotate-[-90deg]' : ''}`}
+                                    />
+                                    <span className={selectedSection === 'buddies' ? 'selected-user' : ''}>
+                                        Buddies ({counts.buddies.online}/{counts.buddies.total})
+                                    </span>
                                 </div>
-                            )}
 
-                            {/* Family Section */}
-                            <div
-                                className={`text-sm font-bold mb-1 mt-1 cursor-pointer flex items-center user-item border border-transparent`}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSectionClick('family');
-                                    toggleSection('family');
-                                }}
-                            >
-                                <img
-                                    src="/ui/bl-arrow.png"
-                                    alt=""
-                                    className={`w-[14px] mr-1 ${collapsedSections.family ? 'rotate-[-90deg]' : ''}`}
-                                />
-                                <span className={selectedSection === 'family' ? 'selected-user' : ''}>
-                                    Family ({counts.family.online}/{counts.family.total})
-                                </span>
-                            </div>
-
-                            {!collapsedSections.family && getOnlineBuddies('family').length > 0 && (
-                                <div className="space-y-0 mb-3">
-                                    {getOnlineBuddies('family').map((buddy) => (
-                                        <div
-                                            key={buddy.buddyId}
-                                            className={`flex items-center justify-between cursor-pointer border border-transparent user-item`}
-                                            onClick={() => handleUserSelect(buddy)}
-                                        >
+                                {!collapsedSections.buddies && getOnlineBuddies('buddies').length > 0 && (
+                                    <div className="space-y-0">
+                                        {getOnlineBuddies('buddies').map((buddy) => (
                                             <div
-                                                className="flex items-center flex-1"
-                                                onDoubleClick={(e) => handleUserDoubleClick(buddy, e)}
+                                                key={buddy.buddyId}
+                                                className={`flex items-center justify-between cursor-pointer border border-transparent user-item`}
+                                                onClick={() => handleUserSelect(buddy)}
+                                                onContextMenu={(e) => handleBuddyContextMenu(e, buddy, 'buddies')}
                                             >
-                                                <span className="mr-1 text-black inline-block w-4 text-center">
-                                                    {/* Empty space to align with arrow */}
-                                                </span>
-                                                {recentlySignedOut.has(buddy.uid) ? (
-                                                    <img
-                                                        src="/ui/doorclose.png"
-                                                        alt=""
-                                                        className="h-[12px] w-[12px] mr-1"
-                                                    />
-                                                ) : recentlySignedIn.has(buddy.uid) ? (
-                                                    <img
-                                                        src="/ui/dooropen.png"
-                                                        alt=""
-                                                        className="h-[12px] w-[12px] mr-1"
-                                                    />
-                                                ) : null}
-                                                <span
-                                                    className={`text-sm ${recentlySignedOut.has(buddy.uid)
-                                                        ? 'font-medium text-[#a29e8f] italic'
-                                                        : recentlySignedIn.has(buddy.uid)
-                                                            ? 'font-bold text-[#1d1272]'
-                                                            : (buddy.online ? 'font-medium text-[#1d1272]' : 'font-medium text-[#a29e8f] italic')
-                                                        } ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}
-                                                    data-original-screenname={buddy.screenname}
-                                                    data-screenname-lower={buddy.screenname.toLowerCase()}
-                                                    style={{ textTransform: 'none !important' }}
-                                                >
-                                                    {buddy.screenname}
-                                                </span>
-                                            </div>
-                                            <button
-                                                onClick={() => handleRemoveBuddy(buddy.buddyId, 'family')}
-                                                className="text-red-500 hover:text-red-700 text-xs px-1"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Co-Workers Section */}
-                            <div
-                                className={`text-sm font-bold mb-1 mt-1 cursor-pointer flex items-center user-item border border-transparent`}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSectionClick('coworkers');
-                                    toggleSection('coworkers');
-                                }}
-                            >
-                                <img
-                                    src="/ui/bl-arrow.png"
-                                    alt=""
-                                    className={`w-[14px] mr-1 ${collapsedSections.coworkers ? 'rotate-[-90deg]' : ''}`}
-                                />
-                                <span className={selectedSection === 'coworkers' ? 'selected-user' : ''}>
-                                    Co-Workers ({counts.coworkers.online}/{counts.coworkers.total})
-                                </span>
-                            </div>
-
-                            {!collapsedSections.coworkers && getOnlineBuddies('coworkers').length > 0 && (
-                                <div className="space-y-0 mb-3">
-                                    {getOnlineBuddies('coworkers').map((buddy) => (
-                                        <div
-                                            key={buddy.buddyId}
-                                            className={`flex items-center justify-between cursor-pointer border border-transparent user-item`}
-                                            onClick={() => handleUserSelect(buddy)}
-                                        >
-                                            <div
-                                                className="flex items-center flex-1"
-                                                onDoubleClick={(e) => handleUserDoubleClick(buddy, e)}
-                                            >
-                                                <span className="mr-1 text-black inline-block w-4 text-center">
-                                                    {/* Empty space to align with arrow */}
-                                                </span>
-                                                {recentlySignedOut.has(buddy.uid) ? (
-                                                    <img
-                                                        src="/ui/doorclose.png"
-                                                        alt=""
-                                                        className="h-[12px] w-[12px] mr-1"
-                                                    />
-                                                ) : recentlySignedIn.has(buddy.uid) ? (
-                                                    <img
-                                                        src="/ui/dooropen.png"
-                                                        alt=""
-                                                        className="h-[12px] w-[12px] mr-1"
-                                                    />
-                                                ) : null}
-                                                <span
-                                                    className={`text-sm ${recentlySignedOut.has(buddy.uid)
-                                                        ? 'font-medium text-[#a29e8f] italic'
-                                                        : recentlySignedIn.has(buddy.uid)
-                                                            ? 'font-bold text-[#1d1272]'
-                                                            : (buddy.online ? 'font-medium text-[#1d1272]' : 'font-medium text-[#a29e8f] italic')
-                                                        } ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}
-                                                    data-original-screenname={buddy.screenname}
-                                                    data-screenname-lower={buddy.screenname.toLowerCase()}
-                                                    style={{ textTransform: 'none !important' }}
-                                                >
-                                                    {buddy.screenname}
-                                                </span>
-                                            </div>
-                                            <button
-                                                onClick={() => handleRemoveBuddy(buddy.buddyId, 'coworkers')}
-                                                className="text-red-500 hover:text-red-700 text-xs px-1"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Offline Section */}
-                            <div
-                                className={`text-sm text-[#a29e8f] font-bold mb-0 mt-1 cursor-pointer flex items-center user-item border border-transparent`}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSectionClick('offline');
-                                    toggleSection('offline');
-                                }}
-                            >
-                                <img
-                                    src="/ui/bl-arrow.png"
-                                    alt=""
-                                    className={`w-[14px] mr-1 ${collapsedSections.offline ? 'rotate-[-90deg]' : ''}`}
-                                />
-                                <span className={selectedSection === 'offline' ? 'selected-user' : ''}>
-                                    Offline ({counts.offline.offline}/{counts.offline.total})
-                                </span>
-                            </div>
-
-                            {!collapsedSections.offline && (() => {
-                                const offlineBuddies = [...getOfflineBuddies('buddies'), ...getOfflineBuddies('family'), ...getOfflineBuddies('coworkers')];
-                                return (
-                                    <div className="space-y-0 mb-3">
-                                        {offlineBuddies.length > 0 && offlineBuddies
-                                            .sort((a, b) => a.screenname.localeCompare(b.screenname))
-                                            .map((buddy) => (
                                                 <div
-                                                    key={buddy.buddyId}
+                                                    className="flex items-center flex-1"
+                                                    onDoubleClick={(e) => handleUserDoubleClick(buddy, e)}
+                                                >
+                                                    <span className="mr-1 text-black inline-block w-4 text-center">
+                                                        {/* Empty space to align with arrow */}
+                                                    </span>
+                                                    {recentlySignedOut.has(buddy.uid) ? (
+                                                        <img
+                                                            src="/ui/doorclose.png"
+                                                            alt=""
+                                                            className="h-[12px] w-[12px] mr-1"
+                                                        />
+                                                    ) : recentlySignedIn.has(buddy.uid) ? (
+                                                        <img
+                                                            src="/ui/dooropen.png"
+                                                            alt=""
+                                                            className="h-[12px] w-[12px] mr-1"
+                                                        />
+                                                    ) : null}
+                                                    <span
+                                                        className={`text-sm ${recentlySignedOut.has(buddy.uid)
+                                                            ? 'font-medium text-[#a29e8f] italic'
+                                                            : recentlySignedIn.has(buddy.uid)
+                                                                ? 'font-bold text-[#000000]'
+                                                                : (buddy.online ? 'font-medium text-[#000000]' : 'font-medium text-[#a29e8f] italic')
+                                                            } ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}
+                                                        data-original-screenname={buddy.screenname}
+                                                        data-screenname-lower={buddy.screenname.toLowerCase()}
+                                                        style={{ textTransform: 'none !important' }}
+                                                    >
+                                                        {buddy.screenname}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Family Section */}
+                                <div
+                                    className={`text-sm font-bold mb-1 mt-1 cursor-pointer flex items-center user-item border border-transparent`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSectionClick('family');
+                                        toggleSection('family');
+                                    }}
+                                >
+                                    <img
+                                        src="/ui/bl-arrow.png"
+                                        alt=""
+                                        className={`w-[14px] mr-1 ${collapsedSections.family ? 'rotate-[-90deg]' : ''}`}
+                                    />
+                                    <span className={selectedSection === 'family' ? 'selected-user' : ''}>
+                                        Family ({counts.family.online}/{counts.family.total})
+                                    </span>
+                                </div>
+
+                                {!collapsedSections.family && getOnlineBuddies('family').length > 0 && (
+                                    <div className="space-y-0 mb-3">
+                                        {getOnlineBuddies('family').map((buddy) => (
+                                            <div
+                                                key={buddy.buddyId}
+                                                className={`flex items-center justify-between cursor-pointer border border-transparent user-item`}
+                                                onClick={() => handleUserSelect(buddy)}
+                                                onContextMenu={(e) => handleBuddyContextMenu(e, buddy, 'family')}
+                                            >
+                                                <div
+                                                    className="flex items-center flex-1"
+                                                    onDoubleClick={(e) => handleUserDoubleClick(buddy, e)}
+                                                >
+                                                    <span className="mr-1 text-black inline-block w-4 text-center">
+                                                        {/* Empty space to align with arrow */}
+                                                    </span>
+                                                    {recentlySignedOut.has(buddy.uid) ? (
+                                                        <img
+                                                            src="/ui/doorclose.png"
+                                                            alt=""
+                                                            className="h-[12px] w-[12px] mr-1"
+                                                        />
+                                                    ) : recentlySignedIn.has(buddy.uid) ? (
+                                                        <img
+                                                            src="/ui/dooropen.png"
+                                                            alt=""
+                                                            className="h-[12px] w-[12px] mr-1"
+                                                        />
+                                                    ) : null}
+                                                    <span
+                                                        className={`text-sm ${recentlySignedOut.has(buddy.uid)
+                                                            ? 'font-medium text-[#a29e8f] italic'
+                                                            : recentlySignedIn.has(buddy.uid)
+                                                                ? 'font-bold text-[#000000]'
+                                                                : (buddy.online ? 'font-medium text-[#000000]' : 'font-medium text-[#a29e8f] italic')
+                                                            } ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}
+                                                        data-original-screenname={buddy.screenname}
+                                                        data-screenname-lower={buddy.screenname.toLowerCase()}
+                                                        style={{ textTransform: 'none !important' }}
+                                                    >
+                                                        {buddy.screenname}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Co-Workers Section */}
+                                <div
+                                    className={`text-sm font-bold mb-1 mt-1 cursor-pointer flex items-center user-item border border-transparent`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSectionClick('coworkers');
+                                        toggleSection('coworkers');
+                                    }}
+                                >
+                                    <img
+                                        src="/ui/bl-arrow.png"
+                                        alt=""
+                                        className={`w-[14px] mr-1 ${collapsedSections.coworkers ? 'rotate-[-90deg]' : ''}`}
+                                    />
+                                    <span className={selectedSection === 'coworkers' ? 'selected-user' : ''}>
+                                        Co-Workers ({counts.coworkers.online}/{counts.coworkers.total})
+                                    </span>
+                                </div>
+
+                                {!collapsedSections.coworkers && getOnlineBuddies('coworkers').length > 0 && (
+                                    <div className="space-y-0 mb-3">
+                                        {getOnlineBuddies('coworkers').map((buddy) => (
+                                            <div
+                                                key={buddy.buddyId}
+                                                className={`flex items-center justify-between cursor-pointer border border-transparent user-item`}
+                                                onClick={() => handleUserSelect(buddy)}
+                                                onContextMenu={(e) => handleBuddyContextMenu(e, buddy, 'coworkers')}
+                                            >
+                                                <div
+                                                    className="flex items-center flex-1"
+                                                    onDoubleClick={(e) => handleUserDoubleClick(buddy, e)}
+                                                >
+                                                    <span className="mr-1 text-black inline-block w-4 text-center">
+                                                        {/* Empty space to align with arrow */}
+                                                    </span>
+                                                    {recentlySignedOut.has(buddy.uid) ? (
+                                                        <img
+                                                            src="/ui/doorclose.png"
+                                                            alt=""
+                                                            className="h-[12px] w-[12px] mr-1"
+                                                        />
+                                                    ) : recentlySignedIn.has(buddy.uid) ? (
+                                                        <img
+                                                            src="/ui/dooropen.png"
+                                                            alt=""
+                                                            className="h-[12px] w-[12px] mr-1"
+                                                        />
+                                                    ) : null}
+                                                    <span
+                                                        className={`text-sm ${recentlySignedOut.has(buddy.uid)
+                                                            ? 'font-medium text-[#a29e8f] italic'
+                                                            : recentlySignedIn.has(buddy.uid)
+                                                                ? 'font-bold text-[#000000]'
+                                                                : (buddy.online ? 'font-medium text-[#000000]' : 'font-medium text-[#a29e8f] italic')
+                                                            } ${selectedUser === buddy.buddyId ? 'selected-user' : ''}`}
+                                                        data-original-screenname={buddy.screenname}
+                                                        data-screenname-lower={buddy.screenname.toLowerCase()}
+                                                        style={{ textTransform: 'none !important' }}
+                                                    >
+                                                        {buddy.screenname}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Offline Section */}
+                                <div
+                                    className={`text-sm text-[#a29e8f] font-bold mb-0 mt-1 cursor-pointer flex items-center user-item border border-transparent`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSectionClick('offline');
+                                        toggleSection('offline');
+                                    }}
+                                >
+                                    <img
+                                        src="/ui/bl-arrow.png"
+                                        alt=""
+                                        className={`w-[14px] mr-1 ${collapsedSections.offline ? 'rotate-[-90deg]' : ''}`}
+                                    />
+                                    <span className={selectedSection === 'offline' ? 'selected-user' : ''}>
+                                        Offline ({counts.offline.offline}/{counts.offline.total})
+                                    </span>
+                                </div>
+
+                                {!collapsedSections.offline && (() => {
+                                    const offlineBuddies = [
+                                        ...getOfflineBuddies('buddies').map((b) => ({ ...b, category: 'buddies' })),
+                                        ...getOfflineBuddies('family').map((b) => ({ ...b, category: 'family' })),
+                                        ...getOfflineBuddies('coworkers').map((b) => ({ ...b, category: 'coworkers' }))
+                                    ].sort((a, b) => a.screenname.localeCompare(b.screenname));
+                                    return (
+                                        <div className="space-y-0 mb-3">
+                                            {offlineBuddies.length > 0 && offlineBuddies.map((buddy) => (
+                                                <div
+                                                    key={`${buddy.category}-${buddy.buddyId}`}
                                                     className={`flex items-center cursor-pointer border border-transparent user-item`}
                                                     onClick={() => handleUserSelect(buddy)}
                                                     onDoubleClick={(e) => handleUserDoubleClick(buddy, e)}
+                                                    onContextMenu={(e) => handleBuddyContextMenu(e, buddy, buddy.category)}
                                                 >
                                                     <span className="mr-1 text-black inline-block w-4 text-center">
                                                         {/* Empty space to align with arrow */}
@@ -1119,77 +1149,107 @@ export default function BuddyListWindow() {
                                                     </span>
                                                 </div>
                                             ))}
-                                    </div>
-                                );
-                            })()}
-                        </div>
-                    </>
-                )}
-
-                {/* Add Buddy Section (bottom) */}
-                <div className="my-2">
-                    <button
-                        onClick={() => setShowAddBuddy(!showAddBuddy)}
-                        className="w-full px-3 py-1 bg-[#d4d0c8] text-black hover:bg-[#c0c0c0] border border-[#808080] border-t-[#ffffff] border-l-[#ffffff] pixelated-font"
-                    >
-                        {showAddBuddy ? "Cancel" : "Add Buddy"}
-                    </button>
-
-                    {showAddBuddy && (
-                        <div className="mt-2 space-y-2">
-                            <input
-                                type="text"
-                                value={newBuddyScreenname}
-                                onChange={(e) => setNewBuddyScreenname(e.target.value)}
-                                placeholder="Enter screenname"
-                                className="w-full px-2 py-1 text-sm border border-[#808080] focus:outline-none"
-                                onKeyPress={(e) => e.key === 'Enter' && handleAddBuddy()}
-                            />
-                            <select
-                                value={selectedCategory}
-                                onChange={(e) => setSelectedCategory(e.target.value)}
-                                className="w-full px-2 py-1 text-sm border border-[#808080] focus:outline-none"
-                            >
-                                <option value="buddies">Buddies</option>
-                                <option value="family">Family</option>
-                                <option value="coworkers">Co-Workers</option>
-                            </select>
-                            <button
-                                onClick={handleAddBuddy}
-                                className="w-full px-3 py-1 bg-[#d4d0c8] text-black hover:bg-[#c0c0c0] border border-[#808080] border-t-[#ffffff] border-l-[#ffffff] pixelated-font"
-                            >
-                                Add
-                            </button>
-                        </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        </>
                     )}
-                </div>
 
-                <button
-                    onClick={async () => {
-                        try {
-                            // Set offline status before signing out
-                            if (auth.currentUser) {
-                                const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
-                                await set(userStatusRef, {
-                                    online: false,
-                                    lastSeen: Date.now(),
-                                    screenname: auth.currentUser.email?.split('@')[0] || 'unknown'
-                                });
-                                console.log('Set offline status on sign out for user:', auth.currentUser.uid);
+                    {/* Add Buddy Section (bottom) */}
+                    <div className="my-2">
+                        <button
+                            onClick={() => setShowAddBuddy(!showAddBuddy)}
+                            className="w-full px-3 py-1 bg-[#d4d0c8] text-black hover:bg-[#c0c0c0] border border-[#808080] border-t-[#ffffff] border-l-[#ffffff] pixelated-font"
+                        >
+                            {showAddBuddy ? "Cancel" : "Add Buddy"}
+                        </button>
+
+                        {showAddBuddy && (
+                            <div className="mt-2 space-y-2">
+                                <input
+                                    type="text"
+                                    value={newBuddyScreenname}
+                                    onChange={(e) => setNewBuddyScreenname(e.target.value)}
+                                    placeholder="Enter screenname"
+                                    className="w-full px-2 py-1 text-sm border border-[#808080] focus:outline-none"
+                                    onKeyPress={(e) => e.key === 'Enter' && handleAddBuddy()}
+                                />
+                                <select
+                                    value={selectedCategory}
+                                    onChange={(e) => setSelectedCategory(e.target.value)}
+                                    className="w-full px-2 py-1 text-sm border border-[#808080] focus:outline-none"
+                                >
+                                    <option value="buddies">Buddies</option>
+                                    <option value="family">Family</option>
+                                    <option value="coworkers">Co-Workers</option>
+                                </select>
+                                <button
+                                    onClick={handleAddBuddy}
+                                    className="w-full px-3 py-1 bg-[#d4d0c8] text-black hover:bg-[#c0c0c0] border border-[#808080] border-t-[#ffffff] border-l-[#ffffff] pixelated-font"
+                                >
+                                    Add
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={async () => {
+                            try {
+                                // Set offline status before signing out
+                                if (auth.currentUser) {
+                                    const userStatusRef = ref(database, `status/${auth.currentUser.uid}`);
+                                    await set(userStatusRef, {
+                                        online: false,
+                                        lastSeen: Date.now(),
+                                        screenname: auth.currentUser.email?.split('@')[0] || 'unknown'
+                                    });
+                                    console.log('Set offline status on sign out for user:', auth.currentUser.uid);
+                                }
+                            } catch (error) {
+                                console.log('Error setting offline status on sign out:', error);
                             }
-                        } catch (error) {
-                            console.log('Error setting offline status on sign out:', error);
-                        }
 
-                        await signOut(auth);
-                        setBuddyListVisible(false);
-                        setLoginWindowVisible(true);
-                    }}
-                    className="w-full px-3 py-1 text-sm bg-[#d4d0c8] text-black hover:bg-[#c0c0c0] border border-[#808080] border-t-[#ffffff] border-l-[#ffffff]"
-                >
-                    Sign Out
-                </button>
+                            await signOut(auth);
+                            setBuddyListVisible(false);
+                            setLoginWindowVisible(true);
+                        }}
+                        className="w-full px-3 py-1 text-sm bg-[#d4d0c8] text-black hover:bg-[#c0c0c0] border border-[#808080] border-t-[#ffffff] border-l-[#ffffff]"
+                    >
+                        Sign Out
+                    </button>
+                </div>
             </div>
-        </div>
+
+            {contextMenu && (
+                <div
+                    className="fixed bg-[#d4d0c8] border border-[#808080] border-t-[#ffffff] border-l-[#ffffff] shadow-lg py-0.5 min-w-[160px] pixelated-font text-sm z-[9999]"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <button
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 hover:bg-[#0a246a] hover:text-white block"
+                        onClick={() => {
+                            openChatWindow(contextMenu.buddy.screenname, contextMenu.buddy.uid);
+                            closeContextMenu();
+                        }}
+                    >
+                        Send instant message
+                    </button>
+                    <button
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 hover:bg-[#0a246a] hover:text-white block text-red-700"
+                        onClick={() => {
+                            handleRemoveBuddy(contextMenu.buddy.buddyId, contextMenu.category);
+                            closeContextMenu();
+                        }}
+                    >
+                        Remove from buddy list
+                    </button>
+                </div>
+            )}
+        </>
     );
 }
